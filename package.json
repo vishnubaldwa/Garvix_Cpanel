@@ -11,8 +11,10 @@
   ],
   "scripts": {
     "start": "tsx apps/local-panel-api/src/cli.ts",
+    "dev:cloud-console": "npm --workspace @garvix/cloud-console run dev",
+    "dev:customer-panel": "npm --workspace @garvix/customer-panel run dev",
     "build": "npm run build --workspaces --if-present",
-    "typecheck": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:security": "vitest run tests/security",

@@ -124,3 +124,9 @@ export function getAuthorizedNavigationForRole(role: GarvixRole): NavigationItem
     return permissions.has(item.requiredPermission);
   });
 }
+
+export { cn } from './lib/utils.js';
+export * from './shadcn/primitives.js';
+export * from './shadcn/navigation-shell.js';
+export * from './react-bits/index.js';
+

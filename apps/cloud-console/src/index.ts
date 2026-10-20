@@ -14,3 +14,6 @@ export const CLOUD_CONSOLE_APP_METADATA = {
     'READ_ONLY_AUDITOR',
   ] as const,
 };
+
+export { CloudConsoleApp } from './App.js';
+

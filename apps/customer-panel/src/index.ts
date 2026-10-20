@@ -1,6 +1,7 @@
 import { getAuthorizedNavigationForRole } from '@garvix/ui-components';
 export { renderWhmPanelWebUiHtml } from './whm-ui.js';
 export { renderLicenseStoreHtml } from './license-store-ui.js';
+export { CustomerPanelApp } from './App.js';
 
 /**
  * Garvix Customer Local Hosting Panel — cPanel Jupiter & WHM Style Web Interface
