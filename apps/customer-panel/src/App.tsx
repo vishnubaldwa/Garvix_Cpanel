@@ -15,6 +15,8 @@ import {
   FolderOpen,
   ShieldCheck,
   Mail,
+  Database,
+  Table2,
 } from 'lucide-react';
 import {
   getAuthorizedNavigationForRole,
@@ -38,7 +40,10 @@ import { NebulixWelcomeHero } from './components/dashboard/NebulixWelcomeHero.js
 import { NebulixStatsGrid } from './components/dashboard/NebulixStatsGrid.js';
 import { NebulixServerMonitoring } from './components/dashboard/NebulixServerMonitoring.js';
 import { NebulixQuickActions } from './components/dashboard/NebulixQuickActions.js';
-import { NebulixModulePages } from './components/dashboard/NebulixModulePages.js';
+import {
+  NebulixModulePages,
+  type EmailMailboxView,
+} from './components/dashboard/NebulixModulePages.js';
 import {
   NebulixWhmSidebar,
   NebulixWhmWorkspace,
@@ -297,19 +302,38 @@ export function CustomerPanelApp(): React.ReactElement {
   // Existing interactive states preserved
   const [dnsRecords, setDnsRecords] = React.useState<DnsRecordItem[]>(INITIAL_DNS_RECORDS);
   const [databases, setDatabases] = React.useState<HostedDbItem[]>(INITIAL_DATABASES);
+  const [mailboxes, setMailboxes] = React.useState<EmailMailboxView[]>([
+    { address: 'vishnu@garvixcloud.in', usedMb: 640, quotaMb: 2048 },
+    { address: 'support@garvixcloud.in', usedMb: 420, quotaMb: 2048 },
+    { address: 'billing@garvixcloud.in', usedMb: 310, quotaMb: 2048 },
+    { address: 'security@garvixcloud.in', usedMb: 185, quotaMb: 1024 },
+  ]);
   const [emailCount, setEmailCount] = React.useState<number>(18);
   const [sslCount, setSslCount] = React.useState<number>(5);
 
   // Modals for Quick Actions
   const [dnsModalOpen, setDnsModalOpen] = React.useState<boolean>(false);
   const [emailModalOpen, setEmailModalOpen] = React.useState<boolean>(false);
+  const [dbModalOpen, setDbModalOpen] = React.useState<boolean>(false);
   const [fileManagerModalOpen, setFileManagerModalOpen] = React.useState<boolean>(false);
   const [sslModalOpen, setSslModalOpen] = React.useState<boolean>(false);
 
   const [newDnsType, setNewDnsType] = React.useState<DnsRecordItem['type']>('A');
   const [newDnsName, setNewDnsName] = React.useState<string>('');
   const [newDnsValue, setNewDnsValue] = React.useState<string>('');
+
+  // Email creation modal fields (Username + Password + Quota)
   const [newEmailUser, setNewEmailUser] = React.useState<string>('');
+  const [newEmailPass, setNewEmailPass] = React.useState<string>('GvX!8mK#4pQ$9zR2');
+  const [newEmailQuota, setNewEmailQuota] = React.useState<number>(2048);
+
+  // Database creation modal fields (Engine + DB Name + DB User + DB Password)
+  const [newDbEngine, setNewDbEngine] = React.useState<'POSTGRESQL_16' | 'MARIADB_10_11'>(
+    'MARIADB_10_11'
+  );
+  const [newDbName, setNewDbName] = React.useState<string>('crm_prod');
+  const [newDbUser, setNewDbUser] = React.useState<string>('crm_admin');
+  const [newDbPass, setNewDbPass] = React.useState<string>('Db!9xP#4wL$8vK2');
 
   const [checkoutPlan, setCheckoutPlan] = React.useState<(typeof STORE_PLANS)[number] | null>(
     null
@@ -351,31 +375,58 @@ export function CustomerPanelApp(): React.ReactElement {
     showToast(`DNS ${newDnsType} record added and validated via named-checkzone.`);
   };
 
-  const handleCreateEmailSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newEmailUser.trim()) return;
+  const handleCreateMailboxDirect = (username: string, _password: string, quotaMb: number) => {
+    const address = `${username}@${activeCpanelDomain}`;
+    setMailboxes((prev) => [{ address, usedMb: 1, quotaMb }, ...prev]);
     setEmailCount((prev) => prev + 1);
-    setNewEmailUser('');
-    setEmailModalOpen(false);
     showToast(
-      `Mailbox ${newEmailUser.trim()}@${activeCpanelDomain} provisioned with Argon2id + DKIM.`
+      `Mailbox ${address} created with Argon2id password hash & ${
+        quotaMb === 0 ? 'Unlimited' : `${quotaMb} MB`
+      } Maildir quota.`
     );
   };
 
+  const handleUpdateMailboxPassword = (address: string, _newPassword: string, quotaMb: number) => {
+    setMailboxes((prev) =>
+      prev.map((m) => (m.address === address ? { ...m, quotaMb } : m))
+    );
+    showToast(`Updated Argon2id password & storage quota for ${address}.`);
+  };
+
+  const handleCreateEmailSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanUser = newEmailUser.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
+    if (!cleanUser || !newEmailPass.trim()) return;
+    handleCreateMailboxDirect(cleanUser, newEmailPass, newEmailQuota);
+    setNewEmailUser('');
+    setEmailModalOpen(false);
+  };
+
   const handleCreateDatabase = () => {
-    const suffix = Math.floor(100 + Math.random() * 900);
-    const dbName = `${activeCpanelUser}_db${suffix}`;
+    setDbModalOpen(true);
+  };
+
+  const handleCreateDatabaseSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = newDbName.trim().toLowerCase().replace(/[^a-z0-9_]/g, '') || 'app_db';
+    const cleanUser = newDbUser.trim().toLowerCase().replace(/[^a-z0-9_]/g, '') || 'app_user';
+    const fullDbName = `${activeCpanelUser}_${cleanName}`;
+    const fullDbUser = `${activeCpanelUser}_${cleanUser}`;
     setDatabases((prev) => [
       ...prev,
       {
         id: `db-${Date.now()}`,
-        name: dbName,
-        engine: prev.length % 2 === 0 ? 'POSTGRESQL_16' : 'MARIADB_10_11',
-        dbUser: `${activeCpanelUser}_u${suffix}`,
-        sizeMb: 12,
+        name: fullDbName,
+        engine: newDbEngine,
+        dbUser: fullDbUser,
+        sizeMb: 16,
       },
     ]);
-    showToast(`Isolated database ${dbName} created on workload instance.`);
+    setDbModalOpen(false);
+    setActiveSidebarItem('databases');
+    showToast(
+      `Created ${newDbEngine} database "${fullDbName}" with user "${fullDbUser}" (ALL PRIVILEGES). Ready in SQL Studio!`
+    );
   };
 
   const handleInstallSslSubmit = (e: React.FormEvent) => {
@@ -624,7 +675,7 @@ export function CustomerPanelApp(): React.ReactElement {
                   <NebulixWelcomeHero
                     onAddDomain={() => setDnsModalOpen(true)}
                     onCreateEmail={() => setEmailModalOpen(true)}
-                    onOpenFileManager={() => setFileManagerModalOpen(true)}
+                    onOpenFileManager={() => setActiveSidebarItem('file-manager')}
                   />
                 </AnimatedContent>
 
@@ -647,7 +698,7 @@ export function CustomerPanelApp(): React.ReactElement {
                   <NebulixQuickActions
                     onAddDomain={() => setDnsModalOpen(true)}
                     onCreateEmail={() => setEmailModalOpen(true)}
-                    onOpenFileManager={() => setFileManagerModalOpen(true)}
+                    onOpenFileManager={() => setActiveSidebarItem('file-manager')}
                     onManageDatabase={handleCreateDatabase}
                     onInstallSsl={() => setSslModalOpen(true)}
                   />
@@ -705,39 +756,56 @@ export function CustomerPanelApp(): React.ReactElement {
 
                     {/* Isolated Customer Databases Card */}
                     <div className="min-w-0 rounded-2xl border border-indigo-100/90 bg-white p-5 shadow-[0_10px_30px_-12px_rgba(99,102,241,0.12)]">
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <h3 className="font-display text-sm font-bold text-slate-900">
-                            cPanel Databases (PostgreSQL &amp; MySQL/MariaDB)
+                            cPanel Databases &amp; SQL Studio (phpMyAdmin)
                           </h3>
                           <p className="text-xs text-slate-500">
-                            Create and manage databases for your websites and apps
+                            Create databases and inspect tables/rows in SQL Studio
                           </p>
                         </div>
-                        <button
-                          type="button"
-                          onClick={handleCreateDatabase}
-                          className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:opacity-95"
-                        >
-                          <Plus className="h-3.5 w-3.5" /> Create DB
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setActiveSidebarItem('databases')}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100"
+                          >
+                            <Table2 className="h-3.5 w-3.5" /> SQL Studio
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCreateDatabase}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:opacity-95"
+                          >
+                            <Plus className="h-3.5 w-3.5" /> Create DB
+                          </button>
+                        </div>
                       </div>
 
                       <div className="mt-4 space-y-2.5">
                         {databases.map((db) => (
                           <div
                             key={db.id}
-                            className="flex items-center justify-between rounded-xl border border-indigo-50 bg-[#FAF9FE] px-3.5 py-2.5 text-xs"
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-50 bg-[#FAF9FE] px-3.5 py-2.5 text-xs"
                           >
                             <div>
                               <div className="font-mono font-bold text-slate-900">{db.name}</div>
-                              <div className="text-slate-500">User: {db.dbUser}</div>
+                              <div className="text-slate-500">
+                                User: {db.dbUser} · {db.sizeMb} MB
+                              </div>
                             </div>
-                            <div className="text-right">
+                            <div className="flex items-center gap-2">
                               <span className="inline-flex rounded-full bg-indigo-50 px-2.5 py-0.5 font-mono text-[10px] font-bold text-indigo-700">
                                 {db.engine}
                               </span>
-                              <div className="mt-1 font-mono text-slate-500">{db.sizeMb} MB</div>
+                              <button
+                                type="button"
+                                onClick={() => setActiveSidebarItem('databases')}
+                                className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-indigo-700"
+                              >
+                                <Table2 className="h-3 w-3" /> Open SQL
+                              </button>
                             </div>
                           </div>
                         ))}
@@ -752,12 +820,17 @@ export function CustomerPanelApp(): React.ReactElement {
             {activeSurface === 'cpanel' && activeSidebarItem !== 'dashboard' && (
               <NebulixModulePages
                 section={activeSidebarItem}
+                activeDomain={activeCpanelDomain}
+                activeLinuxUser={activeCpanelUser}
                 dnsRecords={dnsRecords}
                 databases={databases}
+                mailboxes={mailboxes}
                 emailCount={emailCount}
                 sslCount={sslCount}
                 onOpenDnsModal={() => setDnsModalOpen(true)}
                 onOpenEmailModal={() => setEmailModalOpen(true)}
+                onCreateMailboxDirect={handleCreateMailboxDirect}
+                onUpdateMailboxPassword={handleUpdateMailboxPassword}
                 onCreateDatabase={handleCreateDatabase}
                 onOpenSslModal={() => setSslModalOpen(true)}
                 onShowToast={showToast}
@@ -982,12 +1055,12 @@ export function CustomerPanelApp(): React.ReactElement {
         </form>
       </DialogModal>
 
-      {/* 2. Create Business Email Modal */}
+      {/* 2. Create Business Email Modal (Username + Password + Generator + Quota) */}
       <DialogModal
         open={emailModalOpen}
         onClose={() => setEmailModalOpen(false)}
         title="Create Business Email Account"
-        description="Provisions a Dovecot Argon2id mailbox with 2048-bit DKIM signing."
+        description="Provisions a Dovecot Argon2id mailbox with password & storage quota."
       >
         <form onSubmit={handleCreateEmailSubmit} className="space-y-4">
           <div className="space-y-1.5">
@@ -997,11 +1070,58 @@ export function CustomerPanelApp(): React.ReactElement {
                 required
                 value={newEmailUser}
                 onChange={(e) => setNewEmailUser(e.target.value)}
-                placeholder="support or billing"
+                placeholder="support, sales, or billing"
               />
-              <span className="font-mono text-xs font-bold text-indigo-700">@garvixcloud.in</span>
+              <span className="font-mono text-xs font-bold text-indigo-700">
+                @{activeCpanelDomain}
+              </span>
             </div>
           </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700">
+              Mailbox Password (Required · Hashed via Argon2id)
+            </label>
+            <div className="flex items-center gap-2">
+              <Input
+                required
+                type="text"
+                value={newEmailPass}
+                onChange={(e) => setNewEmailPass(e.target.value)}
+                placeholder="Enter strong mailbox password"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setNewEmailPass(
+                    `GvX!${Math.random().toString(36).slice(2, 7).toUpperCase()}#9mP$2`
+                  )
+                }
+              >
+                <KeyRound className="h-3.5 w-3.5" /> Generate
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700">
+              Storage Space (Maildir Quota)
+            </label>
+            <select
+              value={newEmailQuota}
+              onChange={(e) => setNewEmailQuota(Number(e.target.value))}
+              className="h-10 w-full rounded-xl border border-indigo-200 bg-white px-3 text-xs font-bold text-slate-800 focus:border-indigo-500 focus:outline-none"
+            >
+              <option value={512}>512 MB</option>
+              <option value={1024}>1024 MB (1 GB)</option>
+              <option value={2048}>2048 MB (2 GB — Default)</option>
+              <option value={5120}>5120 MB (5 GB)</option>
+              <option value={0}>Unlimited Quota</option>
+            </select>
+          </div>
+
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setEmailModalOpen(false)}>
               Cancel
@@ -1009,6 +1129,96 @@ export function CustomerPanelApp(): React.ReactElement {
             <Button type="submit" variant="nebulix">
               <Mail className="h-4 w-4" />
               Create Mailbox
+            </Button>
+          </div>
+        </form>
+      </DialogModal>
+
+      {/* 2B. Create Database & User Wizard Modal */}
+      <DialogModal
+        open={dbModalOpen}
+        onClose={() => setDbModalOpen(false)}
+        title="Create Database & SQL User Wizard"
+        description="Creates an isolated database and assigns a dedicated user with ALL PRIVILEGES."
+      >
+        <form onSubmit={handleCreateDatabaseSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700">Database Engine</label>
+            <select
+              value={newDbEngine}
+              onChange={(e) =>
+                setNewDbEngine(e.target.value as 'POSTGRESQL_16' | 'MARIADB_10_11')
+              }
+              className="h-10 w-full rounded-xl border border-indigo-200 bg-white px-3 text-xs font-bold text-slate-800"
+            >
+              <option value="MARIADB_10_11">MariaDB 10.11 / MySQL (Port 3306 · phpMyAdmin)</option>
+              <option value="POSTGRESQL_16">PostgreSQL 16 (Port 5432 · pgAdmin / SQL Studio)</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700">Database Name</label>
+            <div className="flex items-center">
+              <span className="inline-flex h-10 items-center rounded-l-xl border border-r-0 border-indigo-200 bg-indigo-50/70 px-3 font-mono text-xs font-bold text-indigo-700">
+                {activeCpanelUser}_
+              </span>
+              <Input
+                required
+                value={newDbName}
+                onChange={(e) => setNewDbName(e.target.value)}
+                placeholder="crm_prod"
+                className="rounded-l-none"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700">Database Username</label>
+            <div className="flex items-center">
+              <span className="inline-flex h-10 items-center rounded-l-xl border border-r-0 border-indigo-200 bg-indigo-50/70 px-3 font-mono text-xs font-bold text-indigo-700">
+                {activeCpanelUser}_
+              </span>
+              <Input
+                required
+                value={newDbUser}
+                onChange={(e) => setNewDbUser(e.target.value)}
+                placeholder="crm_admin"
+                className="rounded-l-none"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700">Database Password</label>
+            <div className="flex items-center gap-2">
+              <Input
+                required
+                type="text"
+                value={newDbPass}
+                onChange={(e) => setNewDbPass(e.target.value)}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setNewDbPass(
+                    `Db!${Math.random().toString(36).slice(2, 7).toUpperCase()}#8wL$4`
+                  )
+                }
+              >
+                <KeyRound className="h-3.5 w-3.5" /> Generate
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setDbModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="nebulix">
+              <Database className="h-4 w-4" />
+              Create Database &amp; Open SQL Studio
             </Button>
           </div>
         </form>

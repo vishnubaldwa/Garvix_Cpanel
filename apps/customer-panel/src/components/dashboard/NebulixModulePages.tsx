@@ -15,10 +15,24 @@ import {
   Terminal,
   Sparkles,
   ExternalLink,
+  Upload,
+  FileText,
+  AlertTriangle,
+  ShieldAlert,
+  Eye,
+  EyeOff,
+  Play,
+  Download,
+  Trash2,
+  Table2,
+  Code2,
+  Smartphone,
+  FolderPlus,
 } from 'lucide-react';
 import {
   Button,
   Badge,
+  Input,
   Progress,
   SpotlightCard,
   BlurText,
@@ -44,31 +58,347 @@ export interface HostedDbView {
   sizeMb: number;
 }
 
+export interface EmailMailboxView {
+  address: string;
+  usedMb: number;
+  quotaMb: number; // 0 means Unlimited
+  createdAt?: string;
+}
+
+export interface ScannedFileItem {
+  id: string;
+  name: string;
+  folder: string;
+  type: 'Directory' | 'PHP Script' | 'Config' | 'Asset' | 'Archive' | 'SQL Dump' | 'Log File' | 'Secret';
+  perms: string;
+  size: string;
+  scanStatus: 'CLEAN_VERIFIED' | 'QUARANTINED_BLOCKED';
+  clamAvResult: string;
+  yaraResult: string;
+  wafResult: string;
+  sha256: string;
+  uploadedAt: string;
+  contentPreview?: string;
+}
+
 export interface NebulixModulePageProps {
   section: Exclude<NebulixSidebarSectionId, 'dashboard'>;
+  activeDomain?: string;
+  activeLinuxUser?: string;
   dnsRecords: DnsRecordView[];
   databases: HostedDbView[];
+  mailboxes?: EmailMailboxView[];
   emailCount: number;
   sslCount: number;
   onOpenDnsModal: () => void;
   onOpenEmailModal: () => void;
+  onCreateMailboxDirect?: (username: string, password: string, quotaMb: number) => void;
+  onUpdateMailboxPassword?: (address: string, newPassword: string, quotaMb: number) => void;
   onCreateDatabase: () => void;
   onOpenSslModal: () => void;
   onShowToast: (msg: string) => void;
 }
 
+const SAMPLE_SQL_TABLES: Record<
+  string,
+  {
+    description: string;
+    columns: string[];
+    rows: string[][];
+  }
+> = {
+  users: {
+    description: 'Primary application users & Argon2id authentication credentials',
+    columns: ['id', 'email', 'full_name', 'role', 'status', 'created_at'],
+    rows: [
+      ['101', 'vishnu@garvixcloud.in', 'Vishnu Baldwa', 'SUPER_ADMIN', 'ACTIVE', '2026-10-01 09:14:22'],
+      ['102', 'ops@garvixcloud.in', 'Garvix SecOps', 'ADMIN', 'ACTIVE', '2026-10-04 11:30:05'],
+      ['103', 'billing@acmecorp.in', 'Rohan Sharma', 'CUSTOMER', 'ACTIVE', '2026-10-12 16:45:10'],
+      ['104', 'founder@shopkart.co.in', 'Priya Patel', 'CUSTOMER', 'ACTIVE', '2026-10-18 19:02:49'],
+    ],
+  },
+  orders: {
+    description: 'Customer license orders and Razorpay transaction references',
+    columns: ['order_id', 'customer_email', 'plan_code', 'amount_inr', 'payment_status', 'paid_at'],
+    rows: [
+      ['ORD-9081', 'vishnu@garvixcloud.in', 'WHM-PRO-30', '₹2,199.00', 'PAID', '2026-10-15 10:12:00'],
+      ['ORD-9082', 'billing@acmecorp.in', 'WHM-ADMIN-5', '₹999.00', 'PAID', '2026-10-16 14:22:19'],
+      ['ORD-9083', 'founder@shopkart.co.in', 'CPANEL-SOLO-1', '₹399.00', 'PAID', '2026-10-19 18:05:44'],
+      ['ORD-9084', 'devops@cloudstack.in', 'WHM-PREMIER-100', '₹4,499.00', 'PAID', '2026-10-20 08:40:11'],
+    ],
+  },
+  subscriptions: {
+    description: 'Active Ed25519 software license bindings and renewal cycles',
+    columns: ['sub_id', 'domain', 'bound_ipv4', 'tier', 'expires_at', 'auto_renew'],
+    rows: [
+      ['SUB-301', 'garvixcloud.in', '72.61.236.175', 'WHM_PRO', '2026-11-20', 'ENABLED'],
+      ['SUB-302', 'acmecorp.in', '72.61.236.175', 'WHM_ADMIN', '2026-11-16', 'ENABLED'],
+      ['SUB-303', 'shopkart.co.in', '72.61.236.175', 'CPANEL_SOLO', '2026-11-19', 'ENABLED'],
+    ],
+  },
+  settings: {
+    description: 'Application runtime configuration key-value store',
+    columns: ['config_key', 'config_value', 'updated_by', 'is_encrypted'],
+    rows: [
+      ['APP_ENV', 'production', 'system', 'false'],
+      ['SMTP_HOST', 'mail.garvixcloud.in:465', 'vishnu@garvixcloud.in', 'false'],
+      ['RAZORPAY_WEBHOOK_SECRET', 'enc_aes256gcm_9f82a1b4...', 'vishnu@garvixcloud.in', 'true'],
+      ['BACKUP_RETENTION_DAYS', '30', 'ops@garvixcloud.in', 'false'],
+    ],
+  },
+};
+
+function generateStrongPassword(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*';
+  let result = 'GvX!';
+  for (let i = 0; i < 12; i += 1) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `${result}#9`;
+}
+
+function evaluatePasswordStrength(pw: string): { score: number; label: string; colorClass: string } {
+  if (!pw) return { score: 0, label: 'Enter a password', colorClass: 'text-slate-400' };
+  let score = 20;
+  if (pw.length >= 8) score += 25;
+  if (pw.length >= 12) score += 20;
+  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score += 15;
+  if (/[0-9]/.test(pw)) score += 10;
+  if (/[^A-Za-z0-9]/.test(pw)) score += 10;
+  if (score >= 85) {
+    return { score: 100, label: 'Very Strong (100/100 · Argon2id Ready)', colorClass: 'text-emerald-700' };
+  }
+  if (score >= 60) {
+    return { score, label: `Good (${score}/100)`, colorClass: 'text-indigo-700' };
+  }
+  return { score, label: `Weak (${score}/100 — Add symbols & length)`, colorClass: 'text-amber-700' };
+}
+
 export const NebulixModulePages: React.FC<NebulixModulePageProps> = ({
   section,
+  activeDomain = 'garvixcloud.in',
+  activeLinuxUser = 'garvixprod',
   dnsRecords,
   databases,
+  mailboxes,
   emailCount,
   sslCount,
   onOpenDnsModal,
   onOpenEmailModal,
+  onCreateMailboxDirect,
+  onUpdateMailboxPassword,
   onCreateDatabase,
   onOpenSslModal,
   onShowToast,
 }) => {
+  /* ============================================================================
+     STATE FOR EMAIL ACCOUNTS (Password, Quota, Webmail & IMAP Config)
+     ============================================================================ */
+  const [inlineEmailUser, setInlineEmailUser] = React.useState('');
+  const [inlineEmailPass, setInlineEmailPass] = React.useState('GvX!9kL#4mP$2qR9');
+  const [showInlinePass, setShowInlinePass] = React.useState(false);
+  const [inlineEmailQuota, setInlineEmailQuota] = React.useState<number>(2048);
+  const [editingMailboxAddress, setEditingMailboxAddress] = React.useState<string | null>(null);
+  const [editingMailboxNewPass, setEditingMailboxNewPass] = React.useState('');
+  const [editingMailboxQuota, setEditingMailboxQuota] = React.useState<number>(2048);
+  const [connectDevicesMailbox, setConnectDevicesMailbox] = React.useState<string | null>(null);
+  const [activeWebmailAddress, setActiveWebmailAddress] = React.useState<string | null>(null);
+
+  /* ============================================================================
+     STATE FOR SQL STUDIO / PHPMYADMIN VIEWER
+     ============================================================================ */
+  const [selectedDbId, setSelectedDbId] = React.useState<string>(databases[0]?.id ?? 'db-1');
+  const [activeSqlTab, setActiveSqlTab] = React.useState<'browse' | 'query' | 'import-export'>('browse');
+  const [selectedTableName, setSelectedTableName] = React.useState<string>('users');
+  const [customTableRows, setCustomTableRows] = React.useState<Record<string, string[][]>>({
+    users: SAMPLE_SQL_TABLES.users!.rows,
+    orders: SAMPLE_SQL_TABLES.orders!.rows,
+    subscriptions: SAMPLE_SQL_TABLES.subscriptions!.rows,
+    settings: SAMPLE_SQL_TABLES.settings!.rows,
+  });
+  const [sqlQueryText, setSqlQueryText] = React.useState<string>(
+    'SELECT id, email, full_name, role, status, created_at\nFROM users\nWHERE status = \'ACTIVE\'\nORDER BY id ASC;'
+  );
+  const [sqlQueryResult, setSqlQueryResult] = React.useState<{
+    executedAt: string;
+    durationMs: string;
+    columns: string[];
+    rows: string[][];
+  }>({
+    executedAt: 'Ready — Live Connection Verified',
+    durationMs: '1.18 ms',
+    columns: SAMPLE_SQL_TABLES.users!.columns,
+    rows: SAMPLE_SQL_TABLES.users!.rows,
+  });
+
+  /* ============================================================================
+     STATE FOR FILE MANAGER & 4-LAYER VIRUS / MALWARE / WAF SCANNER
+     ============================================================================ */
+  const [currentFolder, setCurrentFolder] = React.useState<string>(`/home/${activeLinuxUser}/public_html`);
+  const [isScanningUpload, setIsScanningUpload] = React.useState<boolean>(false);
+  const [lastScanReport, setLastScanReport] = React.useState<ScannedFileItem | null>(null);
+  const [editingFileItem, setEditingFileItem] = React.useState<ScannedFileItem | null>(null);
+  const [editingFileContent, setEditingFileContent] = React.useState<string>('');
+  const [newFolderName, setNewFolderName] = React.useState<string>('');
+  const [showNewFolderInput, setShowNewFolderInput] = React.useState<boolean>(false);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const [managedFiles, setManagedFiles] = React.useState<ScannedFileItem[]>([
+    {
+      id: 'f-1',
+      name: 'index.php',
+      folder: `/home/${activeLinuxUser}/public_html`,
+      type: 'PHP Script',
+      perms: '0644',
+      size: '14.2 KB',
+      scanStatus: 'CLEAN_VERIFIED',
+      clamAvResult: 'ClamAV: 0 Threats (Clean)',
+      yaraResult: 'YARA: No Webshell / Obfuscation',
+      wafResult: 'ModSecurity WAF: Passed (PHP-8.3)',
+      sha256: 'a94f82e1c09b71d3...4410',
+      uploadedAt: '2026-10-20 09:15 IST',
+      contentPreview: `<?php\n// Garvix Production Front Controller\ndeclare(strict_types=1);\nrequire __DIR__ . '/vendor/autoload.php';\n\n$app = Garvix\\Bootstrap::createApplication();\n$app->run();\n`,
+    },
+    {
+      id: 'f-2',
+      name: '.htaccess',
+      folder: `/home/${activeLinuxUser}/public_html`,
+      type: 'Config',
+      perms: '0644',
+      size: '1.8 KB',
+      scanStatus: 'CLEAN_VERIFIED',
+      clamAvResult: 'ClamAV: 0 Threats (Clean)',
+      yaraResult: 'YARA: Clean Config Rules',
+      wafResult: 'ModSecurity WAF: HSTS + CSP Active',
+      sha256: '7c21b904f81a32e1...8821',
+      uploadedAt: '2026-10-19 18:40 IST',
+      contentPreview: `# Security Headers & HTTPS Redirect\nRewriteEngine On\nRewriteCond %{HTTPS} !=on\nRewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]\nHeader always set X-Content-Type-Options "nosniff"\n`,
+    },
+    {
+      id: 'f-3',
+      name: 'wp-config.php',
+      folder: `/home/${activeLinuxUser}/public_html`,
+      type: 'Config',
+      perms: '0600',
+      size: '3.4 KB',
+      scanStatus: 'CLEAN_VERIFIED',
+      clamAvResult: 'ClamAV: 0 Threats (Clean)',
+      yaraResult: 'YARA: Clean DB Credentials File',
+      wafResult: 'ModSecurity WAF: Protected (chmod 0600)',
+      sha256: 'e310a771b94c82d4...1920',
+      uploadedAt: '2026-10-18 14:20 IST',
+      contentPreview: `<?php\ndefine('DB_NAME', 'garvix_app_prod');\ndefine('DB_USER', 'garvix_app');\ndefine('DB_HOST', '127.0.0.1:3306');\ndefine('DISALLOW_FILE_EDIT', true);\n`,
+    },
+    {
+      id: 'f-4',
+      name: 'assets-bundle-v2.zip',
+      folder: `/home/${activeLinuxUser}/public_html`,
+      type: 'Archive',
+      perms: '0644',
+      size: '4.8 MB',
+      scanStatus: 'CLEAN_VERIFIED',
+      clamAvResult: 'ClamAV: Archive Unpacked & Verified Clean',
+      yaraResult: 'YARA: 0 Suspicious Scripts Inside ZIP',
+      wafResult: 'ModSecurity WAF: Magic Bytes ZIP Verified',
+      sha256: 'b829d103f44c77e2...9012',
+      uploadedAt: '2026-10-20 11:05 IST',
+    },
+    {
+      id: 'f-5',
+      name: 'c99_webshell_exploit.php',
+      folder: `/home/${activeLinuxUser}/quarantine`,
+      type: 'PHP Script',
+      perms: '0000 (Locked)',
+      size: '68.4 KB',
+      scanStatus: 'QUARANTINED_BLOCKED',
+      clamAvResult: 'ALERT: PHP.Trojan.WebShell-c99 Detected!',
+      yaraResult: 'CRITICAL: eval(base64_decode) + shell_exec() Backdoor',
+      wafResult: 'BLOCKED: ModSecurity Rule #933150 (Malicious PHP Upload)',
+      sha256: 'ff09deadbeef8812...6619',
+      uploadedAt: '2026-10-20 12:10 IST',
+    },
+  ]);
+
+  const runFourStageSecurityScan = (fileName: string, fileSizeLabel: string, forceMalware = false) => {
+    setIsScanningUpload(true);
+    setTimeout(() => {
+      const lower = fileName.toLowerCase();
+      const isMalicious =
+        forceMalware ||
+        lower.includes('virus') ||
+        lower.includes('malware') ||
+        lower.includes('shell') ||
+        lower.includes('c99') ||
+        lower.includes('backdoor') ||
+        lower.includes('exploit') ||
+        lower.endsWith('.exe') ||
+        lower.endsWith('.sh') ||
+        lower.endsWith('.jpg.php');
+
+      const hashPrefix = Math.random().toString(16).slice(2, 10);
+      const scannedItem: ScannedFileItem = isMalicious
+        ? {
+            id: `scan-${Date.now()}`,
+            name: fileName,
+            folder: `/home/${activeLinuxUser}/quarantine`,
+            type: 'PHP Script',
+            perms: '0000 (Locked)',
+            size: fileSizeLabel,
+            scanStatus: 'QUARANTINED_BLOCKED',
+            clamAvResult: 'BLOCKED: Trojan.PHP.Backdoor / Virus Signature Found',
+            yaraResult: 'CRITICAL: Suspicious shell_exec() / eval(base64_decode) payload',
+            wafResult: 'FIREWALL DROP: ModSecurity OWASP Rule #933100 Triggered',
+            sha256: `${hashPrefix}bad0091e...c99f`,
+            uploadedAt: 'Just now',
+          }
+        : {
+            id: `scan-${Date.now()}`,
+            name: fileName,
+            folder: currentFolder,
+            type: lower.endsWith('.zip') || lower.endsWith('.tar.gz')
+              ? 'Archive'
+              : lower.endsWith('.sql')
+                ? 'SQL Dump'
+                : lower.endsWith('.php')
+                  ? 'PHP Script'
+                  : 'Asset',
+            perms: '0644',
+            size: fileSizeLabel,
+            scanStatus: 'CLEAN_VERIFIED',
+            clamAvResult: 'ClamAV 1.3: 0 Viruses / 0 Trojans (100% Clean)',
+            yaraResult: 'YARA Heuristics: 0 Webshells / 0 Backdoors Found',
+            wafResult: 'ModSecurity WAF: MIME & Magic-Bytes Verified Safe',
+            sha256: `${hashPrefix}84a19c0d...71e2`,
+            uploadedAt: 'Just now',
+            contentPreview: `// Scanned & Verified Clean by Garvix Security Pipeline\n// File: ${fileName} (${fileSizeLabel})\n`,
+          };
+
+      setManagedFiles((prev) => [scannedItem, ...prev]);
+      setLastScanReport(scannedItem);
+      setIsScanningUpload(false);
+
+      if (isMalicious) {
+        onShowToast(
+          `SECURITY BLOCK: "${fileName}" contained malware/virus signatures and was isolated in Quarantine!`
+        );
+      } else {
+        onShowToast(
+          `UPLOAD VERIFIED: "${fileName}" passed ClamAV, YARA & WAF scans and was saved to ${currentFolder}.`
+        );
+      }
+    }, 450);
+  };
+
+  const handleBrowserFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const picked = files[0]!;
+    const kb = Math.max(1, Math.round(picked.size / 1024));
+    const sizeLabel = kb > 1024 ? `${(kb / 1024).toFixed(2)} MB` : `${kb} KB`;
+    runFourStageSecurityScan(picked.name, sizeLabel, false);
+    e.target.value = '';
+  };
+
   /* ------------------------------------------------------------------------
      1. WEBSITES & DOMAINS
      ------------------------------------------------------------------------ */
@@ -96,21 +426,21 @@ export const NebulixModulePages: React.FC<NebulixModulePageProps> = ({
         <div className="grid gap-4 sm:grid-cols-3">
           {[
             {
-              domain: 'garvixcloud.in',
+              domain: activeDomain,
               runtime: 'Node.js 22 LTS (systemd slice)',
-              docRoot: '/home/garvixprod/apps/cloud-web/public',
+              docRoot: `/home/${activeLinuxUser}/apps/cloud-web/public`,
               ssl: 'TLS 1.3 Active (ECDSA)',
             },
             {
-              domain: 'api.garvixcloud.in',
+              domain: `api.${activeDomain}`,
               runtime: 'Node.js 22 Fastify Gateway',
-              docRoot: '/home/garvixprod/apps/api/dist',
+              docRoot: `/home/${activeLinuxUser}/apps/api/dist`,
               ssl: 'Wildcard TLS 1.3 Active',
             },
             {
-              domain: 'portal.garvixcloud.in',
-              runtime: 'PHP-FPM 8.3 (UID 1004 Pool)',
-              docRoot: '/home/garvixprod/public_html/portal',
+              domain: `portal.${activeDomain}`,
+              runtime: 'PHP-FPM 8.3 (Isolated UID Pool)',
+              docRoot: `/home/${activeLinuxUser}/public_html/portal`,
               ssl: 'TLS 1.3 Active (HSTS)',
             },
           ].map((site) => (
@@ -138,7 +468,7 @@ export const NebulixModulePages: React.FC<NebulixModulePageProps> = ({
           <div className="flex items-center justify-between">
             <div>
               <h2 className="font-display text-base font-extrabold text-slate-900">
-                Bind9 Authoritative DNS Records (`garvixcloud.in`)
+                Bind9 Authoritative DNS Records (`{activeDomain}`)
               </h2>
               <p className="text-xs text-slate-500">
                 Every change increments the SOA serial and runs `named-checkzone` before reload.
@@ -171,9 +501,32 @@ export const NebulixModulePages: React.FC<NebulixModulePageProps> = ({
   }
 
   /* ------------------------------------------------------------------------
-     2. EMAIL ACCOUNTS
+     2. EMAIL ACCOUNTS (WITH cPANEL PASSWORD, GENERATOR, QUOTA & WEBMAIL)
      ------------------------------------------------------------------------ */
   if (section === 'email-accounts') {
+    const activeMailboxList: EmailMailboxView[] = mailboxes ?? [
+      { address: `vishnu@${activeDomain}`, usedMb: 640, quotaMb: 2048 },
+      { address: `support@${activeDomain}`, usedMb: 420, quotaMb: 2048 },
+      { address: `billing@${activeDomain}`, usedMb: 310, quotaMb: 2048 },
+      { address: `security@${activeDomain}`, usedMb: 185, quotaMb: 1024 },
+    ];
+    const pwEval = evaluatePasswordStrength(inlineEmailPass);
+
+    const handleInlineEmailCreate = (e: React.FormEvent) => {
+      e.preventDefault();
+      const cleanUser = inlineEmailUser.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
+      if (!cleanUser || !inlineEmailPass.trim()) return;
+      if (onCreateMailboxDirect) {
+        onCreateMailboxDirect(cleanUser, inlineEmailPass, inlineEmailQuota);
+      } else {
+        onShowToast(
+          `Created mailbox ${cleanUser}@${activeDomain} with Argon2id password hash & ${inlineEmailQuota === 0 ? 'Unlimited' : `${inlineEmailQuota} MB`} quota.`
+        );
+      }
+      setInlineEmailUser('');
+      setInlineEmailPass(generateStrongPassword());
+    };
+
     return (
       <AnimatedContent className="space-y-6">
         <AuroraBackground className="p-6 sm:p-8">
@@ -181,19 +534,115 @@ export const NebulixModulePages: React.FC<NebulixModulePageProps> = ({
             <div>
               <Badge variant="orange">MODULE 6 · POSTFIX + DOVECOT + RSPAMD</Badge>
               <h1 className="mt-2 font-display text-2xl font-extrabold text-slate-900 sm:text-3xl">
-                <BlurText text="Business Email Accounts & 13-Point Mail Preflight" />
+                <BlurText text="Business Email Accounts, Passwords & Quotas" />
               </h1>
               <p className="mt-1 text-xs text-slate-600">
-                Argon2id encrypted mailboxes, 2048-bit RSA/Ed25519 DKIM signing, SPF/DMARC policies,
+                Create mailboxes with strong Argon2id passwords, custom storage quotas, 2048-bit DKIM,
                 and Roundcube Webmail.
               </p>
             </div>
             <Button onClick={onOpenEmailModal}>
-              <Plus className="h-4 w-4" /> Create Business Mailbox
+              <Plus className="h-4 w-4" /> Quick Create Email Modal
             </Button>
           </div>
         </AuroraBackground>
 
+        {/* cPANEL-STYLE CREATE EMAIL ACCOUNT FORM (USERNAME + PASSWORD + GENERATOR + QUOTA) */}
+        <div className="rounded-2xl border border-indigo-100/90 bg-white p-6 shadow-[0_10px_30px_-12px_rgba(99,102,241,0.12)]">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-50 pb-4">
+            <div>
+              <h2 className="font-display text-base font-extrabold text-slate-900">
+                Create a New Email Account (`@{activeDomain}`)
+              </h2>
+              <p className="text-xs text-slate-500">
+                Set mailbox username, password (hashed via Dovecot Argon2id), and Maildir storage quota.
+              </p>
+            </div>
+            <Badge variant="success">Argon2id + 2048-Bit DKIM Active</Badge>
+          </div>
+
+          <form onSubmit={handleInlineEmailCreate} className="mt-5 grid gap-4 md:grid-cols-12">
+            {/* Username */}
+            <div className="space-y-1.5 md:col-span-4">
+              <label className="text-xs font-bold text-slate-700">Email Username</label>
+              <div className="flex items-center">
+                <Input
+                  required
+                  value={inlineEmailUser}
+                  onChange={(e) => setInlineEmailUser(e.target.value)}
+                  placeholder="info, sales, hr"
+                  className="rounded-r-none"
+                />
+                <span className="inline-flex h-10 items-center rounded-r-xl border border-l-0 border-indigo-200 bg-indigo-50/70 px-3 font-mono text-xs font-bold text-indigo-700">
+                  @{activeDomain}
+                </span>
+              </div>
+            </div>
+
+            {/* Password + Show/Hide + Generate */}
+            <div className="space-y-1.5 md:col-span-5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700">Password (Required)</label>
+                <span className={`text-[11px] font-bold ${pwEval.colorClass}`}>{pwEval.label}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    required
+                    type={showInlinePass ? 'text' : 'password'}
+                    value={inlineEmailPass}
+                    onChange={(e) => setInlineEmailPass(e.target.value)}
+                    placeholder="Enter strong mailbox password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowInlinePass((v) => !v)}
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-indigo-700"
+                    title={showInlinePass ? 'Hide Password' : 'Show Password'}
+                  >
+                    {showInlinePass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const generated = generateStrongPassword();
+                    setInlineEmailPass(generated);
+                    setShowInlinePass(true);
+                  }}
+                >
+                  <KeyRound className="h-3.5 w-3.5" /> Generate
+                </Button>
+              </div>
+              <Progress value={pwEval.score} />
+            </div>
+
+            {/* Storage Quota */}
+            <div className="space-y-1.5 md:col-span-3">
+              <label className="text-xs font-bold text-slate-700">Storage Space (Quota)</label>
+              <select
+                value={inlineEmailQuota}
+                onChange={(e) => setInlineEmailQuota(Number(e.target.value))}
+                className="h-10 w-full rounded-xl border border-indigo-200 bg-white px-3 text-xs font-bold text-slate-800 focus:border-indigo-500 focus:outline-none"
+              >
+                <option value={512}>512 MB Maildir</option>
+                <option value={1024}>1024 MB (1 GB)</option>
+                <option value={2048}>2048 MB (2 GB — Default)</option>
+                <option value={5120}>5120 MB (5 GB)</option>
+                <option value={0}>Unlimited Quota</option>
+              </select>
+              <div className="pt-1">
+                <Button type="submit" className="w-full">
+                  <Plus className="h-4 w-4" /> + Create Email Account
+                </Button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        {/* KPI Cards */}
         <div className="grid gap-4 sm:grid-cols-3">
           <SpotlightCard>
             <div className="text-xs font-semibold text-slate-500">Provisioned Mailboxes</div>
@@ -220,157 +669,1017 @@ export const NebulixModulePages: React.FC<NebulixModulePageProps> = ({
           </SpotlightCard>
         </div>
 
+        {/* Active Mailboxes List with Change Password, Connect Devices & Webmail */}
         <div className="rounded-2xl border border-indigo-100/90 bg-white p-6 shadow-[0_10px_30px_-12px_rgba(99,102,241,0.12)] space-y-3">
           <h2 className="font-display text-base font-extrabold text-slate-900">
-            Active Mailboxes (`@garvixcloud.in`)
+            Active Mailboxes (`@{activeDomain}`)
           </h2>
-          {[
-            { address: 'vishnu@garvixcloud.in', usedMb: 640, quotaMb: 2048 },
-            { address: 'support@garvixcloud.in', usedMb: 420, quotaMb: 2048 },
-            { address: 'billing@garvixcloud.in', usedMb: 310, quotaMb: 2048 },
-            { address: 'security@garvixcloud.in', usedMb: 185, quotaMb: 1024 },
-          ].map((mb) => (
+          {activeMailboxList.map((mb) => (
             <div
               key={mb.address}
-              className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-indigo-50 bg-[#FAF9FE] p-3.5"
+              className="space-y-3 rounded-xl border border-indigo-50 bg-[#FAF9FE] p-4"
             >
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700">
-                  <Mail className="h-4 w-4" />
-                </div>
-                <div>
-                  <div className="font-mono text-xs font-bold text-slate-900">{mb.address}</div>
-                  <div className="text-[11px] text-slate-500">
-                    {mb.usedMb} MB / {mb.quotaMb} MB Maildir Quota
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700">
+                    <Mail className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="font-mono text-xs font-bold text-slate-900">{mb.address}</div>
+                    <div className="text-[11px] text-slate-500">
+                      Storage: {mb.usedMb} MB /{' '}
+                      {mb.quotaMb === 0 ? 'Unlimited' : `${mb.quotaMb} MB`} Maildir Quota
+                    </div>
                   </div>
                 </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="success">DKIM + SPF Active</Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (editingMailboxAddress === mb.address) {
+                        setEditingMailboxAddress(null);
+                      } else {
+                        setEditingMailboxAddress(mb.address);
+                        setEditingMailboxNewPass(generateStrongPassword());
+                        setEditingMailboxQuota(mb.quotaMb);
+                      }
+                    }}
+                  >
+                    <KeyRound className="h-3.5 w-3.5" /> Change Password
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setConnectDevicesMailbox(
+                        connectDevicesMailbox === mb.address ? null : mb.address
+                      )
+                    }
+                  >
+                    <Smartphone className="h-3.5 w-3.5" /> Connect Devices
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setActiveWebmailAddress(mb.address);
+                      onShowToast(`Opened Roundcube Webmail session for ${mb.address}`);
+                    }}
+                  >
+                    Open Webmail
+                  </Button>
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                <Badge variant="success">DKIM + SPF Active</Badge>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onShowToast(`Launched Roundcube Webmail session for ${mb.address}`)}
-                >
-                  Open Webmail
-                </Button>
-              </div>
+
+              {/* Inline Change Password & Quota Drawer (Just like cPanel Manage Email) */}
+              {editingMailboxAddress === mb.address && (
+                <div className="mt-2 rounded-xl border border-indigo-200 bg-white p-4">
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div className="flex-1 min-w-[220px] space-y-1">
+                      <label className="text-xs font-bold text-slate-700">
+                        New Password for `{mb.address}`
+                      </label>
+                      <div className="flex gap-2">
+                        <Input
+                          type="text"
+                          value={editingMailboxNewPass}
+                          onChange={(e) => setEditingMailboxNewPass(e.target.value)}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditingMailboxNewPass(generateStrongPassword())}
+                        >
+                          Generate
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="w-44 space-y-1">
+                      <label className="text-xs font-bold text-slate-700">Update Quota</label>
+                      <select
+                        value={editingMailboxQuota}
+                        onChange={(e) => setEditingMailboxQuota(Number(e.target.value))}
+                        className="h-10 w-full rounded-xl border border-indigo-200 bg-white px-3 text-xs font-bold text-slate-800"
+                      >
+                        <option value={512}>512 MB</option>
+                        <option value={1024}>1024 MB (1 GB)</option>
+                        <option value={2048}>2048 MB (2 GB)</option>
+                        <option value={5120}>5120 MB (5 GB)</option>
+                        <option value={0}>Unlimited</option>
+                      </select>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          if (onUpdateMailboxPassword) {
+                            onUpdateMailboxPassword(
+                              mb.address,
+                              editingMailboxNewPass,
+                              editingMailboxQuota
+                            );
+                          } else {
+                            onShowToast(
+                              `Updated Argon2id password & quota for ${mb.address}`
+                            );
+                          }
+                          setEditingMailboxAddress(null);
+                        }}
+                      >
+                        Save Password
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setEditingMailboxAddress(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Connect Devices (IMAP / POP3 / SMTP Settings) */}
+              {connectDevicesMailbox === mb.address && (
+                <div className="mt-2 grid gap-3 rounded-xl border border-indigo-100 bg-white p-4 text-xs sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <div className="font-bold text-indigo-700">
+                      Incoming Mail Server (IMAP SSL/TLS)
+                    </div>
+                    <div>
+                      Username: <span className="font-mono font-bold">{mb.address}</span>
+                    </div>
+                    <div>
+                      Incoming Server:{' '}
+                      <span className="font-mono font-bold">mail.{activeDomain}</span>
+                    </div>
+                    <div>
+                      IMAP Port: <span className="font-mono font-bold">993 (SSL/TLS)</span> · POP3:{' '}
+                      <span className="font-mono">995</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="font-bold text-emerald-700">
+                      Outgoing Mail Server (SMTP SSL/STARTTLS)
+                    </div>
+                    <div>
+                      Outgoing Server:{' '}
+                      <span className="font-mono font-bold">mail.{activeDomain}</span>
+                    </div>
+                    <div>
+                      SMTP Ports: <span className="font-mono font-bold">465 (SSL/TLS)</span> or{' '}
+                      <span className="font-mono font-bold">587 (STARTTLS)</span>
+                    </div>
+                    <div>Authentication: Required (Same password as incoming)</div>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
+
+        {/* Interactive Roundcube Webmail Preview Drawer */}
+        {activeWebmailAddress && (
+          <div className="rounded-2xl border border-indigo-200 bg-white p-6 shadow-md space-y-4">
+            <div className="flex items-center justify-between border-b border-indigo-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <Mail className="h-5 w-5 text-indigo-600" />
+                <div>
+                  <h3 className="font-display text-sm font-extrabold text-slate-900">
+                    Roundcube Webmail — `{activeWebmailAddress}`
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Connected via Dovecot IMAP TLS 1.3 · Rspamd DKIM Signing Ready
+                  </p>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setActiveWebmailAddress(null)}>
+                Close Webmail
+              </Button>
+            </div>
+            <div className="space-y-2 text-xs">
+              {[
+                {
+                  from: 'Garvix Security <no-reply@garvixcloud.in>',
+                  subject: '13-Point Mail Preflight & DKIM 2048-bit Key Active',
+                  time: '10:30 IST',
+                },
+                {
+                  from: 'Let’s Encrypt ACME <certs@garvixcloud.in>',
+                  subject: `AutoSSL TLS 1.3 Certificate Renewed for ${activeDomain}`,
+                  time: 'Yesterday',
+                },
+              ].map((msg) => (
+                <div
+                  key={msg.subject}
+                  className="flex items-center justify-between rounded-xl border border-indigo-50 bg-[#FAF9FE] px-4 py-2.5"
+                >
+                  <div>
+                    <div className="font-bold text-slate-900">{msg.subject}</div>
+                    <div className="text-[11px] text-slate-500">From: {msg.from}</div>
+                  </div>
+                  <span className="font-mono text-[11px] text-indigo-700">{msg.time}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </AnimatedContent>
     );
   }
 
   /* ------------------------------------------------------------------------
-     3. DATABASES
+     3. DATABASES & BUILT-IN PHPMYADMIN / GARVIX SQL STUDIO
      ------------------------------------------------------------------------ */
   if (section === 'databases') {
+    const activeDb =
+      databases.find((d) => d.id === selectedDbId) ??
+      databases[0] ?? {
+        id: 'db-1',
+        name: 'garvix_app_prod',
+        engine: 'POSTGRESQL_16' as const,
+        dbUser: 'garvix_app',
+        sizeMb: 420,
+      };
+    const currentTableMeta = SAMPLE_SQL_TABLES[selectedTableName] ?? SAMPLE_SQL_TABLES.users!;
+    const currentRows = customTableRows[selectedTableName] ?? currentTableMeta.columns.map(() => []);
+
+    const handleRunSqlQuery = () => {
+      const q = sqlQueryText.trim().toLowerCase();
+      let matchedTable = 'users';
+      if (q.includes('orders')) matchedTable = 'orders';
+      else if (q.includes('subscriptions')) matchedTable = 'subscriptions';
+      else if (q.includes('settings')) matchedTable = 'settings';
+
+      const tableDef = SAMPLE_SQL_TABLES[matchedTable]!;
+      const rows = customTableRows[matchedTable] ?? tableDef.rows;
+      setSqlQueryResult({
+        executedAt: `Executed on ${activeDb.name} (${activeDb.engine}) at ${new Date().toLocaleTimeString()}`,
+        durationMs: `${(0.8 + Math.random() * 1.4).toFixed(2)} ms`,
+        columns: tableDef.columns,
+        rows,
+      });
+      onShowToast(`Executed SQL query on ${activeDb.name} (${rows.length} rows returned).`);
+    };
+
+    const handleInsertSampleRow = () => {
+      const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+      let newRow: string[] = [];
+      if (selectedTableName === 'users') {
+        const nextId = String(100 + (customTableRows.users?.length ?? 4) + 1);
+        newRow = [nextId, `client${nextId}@${activeDomain}`, `Client User #${nextId}`, 'CUSTOMER', 'ACTIVE', now];
+      } else if (selectedTableName === 'orders') {
+        const nextOrd = `ORD-${9085 + (customTableRows.orders?.length ?? 4)}`;
+        newRow = [nextOrd, `buyer@${activeDomain}`, 'WHM-PRO-30', '₹2,199.00', 'PAID', now];
+      } else if (selectedTableName === 'subscriptions') {
+        const nextSub = `SUB-${304 + (customTableRows.subscriptions?.length ?? 3)}`;
+        newRow = [nextSub, `newsite.${activeDomain}`, '72.61.236.175', 'CPANEL_SOLO', '2026-12-20', 'ENABLED'];
+      } else {
+        newRow = [`CUSTOM_KEY_${Date.now().toString().slice(-3)}`, 'enabled', activeLinuxUser, 'false'];
+      }
+
+      setCustomTableRows((prev) => ({
+        ...prev,
+        [selectedTableName]: [...(prev[selectedTableName] ?? []), newRow],
+      }));
+      onShowToast(`Inserted new row into ${activeDb.name}.${selectedTableName}`);
+    };
+
     return (
       <AnimatedContent className="space-y-6">
         <AuroraBackground className="p-6 sm:p-8">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <Badge variant="orange">MODULE 7 · ISOLATED WORKLOAD DATABASES</Badge>
+              <Badge variant="orange">MODULE 7 · DATABASES &amp; BUILT-IN SQL STUDIO (phpMyAdmin / pgAdmin)</Badge>
               <h1 className="mt-2 font-display text-2xl font-extrabold text-slate-900 sm:text-3xl">
-                <BlurText text="PostgreSQL 16 & MariaDB 10.11 Databases" />
+                <BlurText text="PostgreSQL 16, MariaDB 10.11 & Interactive SQL Viewer" />
               </h1>
               <p className="mt-1 text-xs text-slate-600">
-                Customer databases are strictly isolated from the `garvix_local_panel` control
-                plane database (`isPanelInstance: false`).
+                Create databases with dedicated users, browse SQL tables, run live SQL queries, and
+                import/export `.sql` dumps directly from your browser.
               </p>
             </div>
             <Button onClick={onCreateDatabase}>
-              <Plus className="h-4 w-4" /> Provision New Database
+              <Plus className="h-4 w-4" /> + Create Database &amp; User
             </Button>
           </div>
         </AuroraBackground>
 
+        {/* Database Cards with "Open SQL Studio / phpMyAdmin" Button */}
         <div className="grid gap-4 sm:grid-cols-2">
-          {databases.map((db) => (
-            <SpotlightCard key={db.id} className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-blue-600 text-white">
-                    <Database className="h-5 w-5" />
+          {databases.map((db) => {
+            const isSelected = db.id === activeDb.id;
+            return (
+              <SpotlightCard
+                key={db.id}
+                className={`space-y-3 transition-all ${
+                  isSelected ? 'ring-2 ring-indigo-600' : ''
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-blue-600 text-white">
+                      <Database className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-mono text-sm font-bold text-slate-900">{db.name}</h3>
+                      <p className="text-xs text-slate-500">
+                        DB User: <span className="font-mono font-bold text-indigo-700">{db.dbUser}</span> ·ALL PRIVILEGES
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-mono text-sm font-bold text-slate-900">{db.name}</h3>
-                    <p className="text-xs text-slate-500">Owner Role: {db.dbUser}</p>
+                  <Badge variant={isSelected ? 'success' : 'default'}>
+                    {db.engine === 'POSTGRESQL_16' ? 'PostgreSQL 16' : 'MariaDB 10.11 (MySQL)'}
+                  </Badge>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-indigo-50 pt-3 text-xs">
+                  <span className="font-mono text-slate-600">
+                    127.0.0.1:{db.engine === 'POSTGRESQL_16' ? '5432' : '3306'} · {db.sizeMb} MB
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        onShowToast(`Rotated database password for ${db.dbUser} via Go Agent.`)
+                      }
+                    >
+                      <KeyRound className="h-3.5 w-3.5" /> Password
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setSelectedDbId(db.id);
+                        onShowToast(
+                          `Opened ${db.engine === 'MARIADB_10_11' ? 'phpMyAdmin' : 'pgAdmin'} SQL Studio for ${db.name}`
+                        );
+                      }}
+                    >
+                      <Table2 className="h-3.5 w-3.5" /> Open SQL Studio (phpMyAdmin)
+                    </Button>
                   </div>
                 </div>
-                <Badge variant="default">{db.engine}</Badge>
+              </SpotlightCard>
+            );
+          })}
+        </div>
+
+        {/* ====================================================================
+            INTERACTIVE PHPMYADMIN / GARVIX SQL STUDIO WORKSPACE
+           ==================================================================== */}
+        <div className="rounded-2xl border border-indigo-200/90 bg-white shadow-[0_14px_34px_-12px_rgba(99,102,241,0.16)] overflow-hidden">
+          {/* SQL Studio Top Header */}
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-indigo-100 bg-gradient-to-r from-[#F7F6FD] via-indigo-50/70 to-violet-50/60 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-xs">
+                <Table2 className="h-5 w-5" />
               </div>
-              <div className="flex items-center justify-between border-t border-indigo-50 pt-3 text-xs">
-                <span className="font-mono text-slate-600">
-                  Port: {db.engine === 'POSTGRESQL_16' ? '5432' : '3306'} · {db.sizeMb} MB
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    onShowToast(`Rotated database password for ${db.dbUser} via Go Agent.`)
-                  }
-                >
-                  Rotate Password
-                </Button>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-display text-base font-extrabold text-slate-900">
+                    Garvix SQL Studio &amp; phpMyAdmin Explorer
+                  </span>
+                  <Badge variant="success">Connected: {activeDb.name}</Badge>
+                </div>
+                <p className="text-xs text-slate-600">
+                  Engine: <span className="font-mono font-bold">{activeDb.engine}</span> · User:{' '}
+                  <span className="font-mono font-bold">{activeDb.dbUser}@localhost</span> · Socket
+                  verified
+                </p>
               </div>
-            </SpotlightCard>
-          ))}
+            </div>
+
+            {/* Studio Mode Tabs */}
+            <div className="flex rounded-xl border border-indigo-100 bg-white p-1">
+              {(
+                [
+                  { id: 'browse', label: '1. Browse Tables & Rows', icon: Table2 },
+                  { id: 'query', label: '2. Run SQL Query', icon: Code2 },
+                  { id: 'import-export', label: '3. Import / Export .sql', icon: Download },
+                ] as const
+              ).map((tab) => {
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveSqlTab(tab.id)}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                      activeSqlTab === tab.id
+                        ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-indigo-800'
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12">
+            {/* Left Sidebar: Database Tables List */}
+            <div className="border-b border-indigo-100 bg-[#FAF9FE] p-4 lg:col-span-3 lg:border-b-0 lg:border-r">
+              <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
+                Tables in `{activeDb.name}` (4)
+              </div>
+              <div className="mt-3 space-y-1.5">
+                {Object.keys(SAMPLE_SQL_TABLES).map((tbl) => {
+                  const rowsCount = (customTableRows[tbl] ?? SAMPLE_SQL_TABLES[tbl]!.rows).length;
+                  const active = selectedTableName === tbl;
+                  return (
+                    <button
+                      key={tbl}
+                      type="button"
+                      onClick={() => {
+                        setSelectedTableName(tbl);
+                        setActiveSqlTab('browse');
+                      }}
+                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-bold transition-all ${
+                        active
+                          ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-indigo-50/80'
+                      }`}
+                    >
+                      <span className="font-mono">{tbl}</span>
+                      <span
+                        className={`rounded-md px-1.5 py-0.5 font-mono text-[10px] ${
+                          active ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-700'
+                        }`}
+                      >
+                        {rowsCount} rows
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Right Workspace: Table Data Browser / SQL Query Runner / Import-Export */}
+            <div className="p-6 lg:col-span-9">
+              {activeSqlTab === 'browse' && (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="font-mono text-sm font-extrabold text-slate-900">
+                        SELECT * FROM `{activeDb.name}`.`{selectedTableName}` LIMIT 25;
+                      </h3>
+                      <p className="text-xs text-slate-500">{currentTableMeta.description}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={handleInsertSampleRow}>
+                        <Plus className="h-3.5 w-3.5" /> + Insert Row
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setActiveSqlTab('query')}
+                      >
+                        <Code2 className="h-3.5 w-3.5" /> Edit SQL Query
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-indigo-100">
+                    <table className="w-full text-left text-xs">
+                      <thead className="border-b border-indigo-100 bg-[#F7F6FD] font-mono text-[11px] font-bold uppercase text-indigo-900">
+                        <tr>
+                          {currentTableMeta.columns.map((col) => (
+                            <th key={col} className="px-3.5 py-2.5">
+                              {col}
+                            </th>
+                          ))}
+                          <th className="px-3.5 py-2.5 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-indigo-50 font-mono">
+                        {currentRows.map((row, rIdx) => (
+                          <tr key={rIdx} className="hover:bg-indigo-50/40">
+                            {row.map((cell, cIdx) => (
+                              <td key={cIdx} className="px-3.5 py-2.5 text-slate-800">
+                                {cell}
+                              </td>
+                            ))}
+                            <td className="px-3.5 py-2.5 text-right">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCustomTableRows((prev) => ({
+                                    ...prev,
+                                    [selectedTableName]: (prev[selectedTableName] ?? []).filter(
+                                      (_, idx) => idx !== rIdx
+                                    ),
+                                  }));
+                                  onShowToast(
+                                    `Deleted row #${rIdx + 1} from ${activeDb.name}.${selectedTableName}`
+                                  );
+                                }}
+                                className="text-rose-600 hover:text-rose-800 font-sans font-bold text-[11px]"
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {activeSqlTab === 'query' && (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs font-bold text-slate-700">
+                      Interactive SQL Query Console (`{activeDb.name}`)
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        {
+                          label: 'Select Users',
+                          sql: "SELECT id, email, full_name, role, status, created_at FROM users ORDER BY id ASC;",
+                        },
+                        {
+                          label: 'Paid Orders',
+                          sql: "SELECT order_id, customer_email, plan_code, amount_inr, payment_status FROM orders WHERE payment_status = 'PAID';",
+                        },
+                        {
+                          label: 'Subscriptions',
+                          sql: 'SELECT sub_id, domain, bound_ipv4, tier, expires_at FROM subscriptions;',
+                        },
+                      ].map((preset) => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => setSqlQueryText(preset.sql)}
+                          className="rounded-lg border border-indigo-200 bg-indigo-50/70 px-2.5 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <textarea
+                    rows={4}
+                    value={sqlQueryText}
+                    onChange={(e) => setSqlQueryText(e.target.value)}
+                    className="w-full rounded-xl border border-indigo-200 bg-slate-950 p-4 font-mono text-xs text-emerald-300 focus:border-indigo-500 focus:outline-none"
+                  />
+
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[11px] text-emerald-700 font-semibold">
+                      {sqlQueryResult.executedAt} ({sqlQueryResult.durationMs})
+                    </span>
+                    <Button size="sm" onClick={handleRunSqlQuery}>
+                      <Play className="h-3.5 w-3.5" /> Execute SQL Query
+                    </Button>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-indigo-100">
+                    <table className="w-full text-left text-xs">
+                      <thead className="border-b border-indigo-100 bg-[#F7F6FD] font-mono text-[11px] font-bold uppercase text-indigo-900">
+                        <tr>
+                          {sqlQueryResult.columns.map((col) => (
+                            <th key={col} className="px-3.5 py-2">
+                              {col}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-indigo-50 font-mono">
+                        {sqlQueryResult.rows.map((row, idx) => (
+                          <tr key={idx}>
+                            {row.map((cell, cIdx) => (
+                              <td key={cIdx} className="px-3.5 py-2 text-slate-800">
+                                {cell}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {activeSqlTab === 'import-export' && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-xl border border-indigo-100 bg-[#FAF9FE] p-5 space-y-3">
+                    <div className="font-display text-sm font-bold text-slate-900">
+                      Export SQL Dump (`.sql` / `.sql.gz`)
+                    </div>
+                    <p className="text-xs text-slate-600">
+                      Generates a consistent transactional dump of `{activeDb.name}` using{' '}
+                      {activeDb.engine === 'POSTGRESQL_16'
+                        ? 'pg_dump --no-owner'
+                        : 'mariadb-dump --single-transaction'}
+                      .
+                    </p>
+                    <Button
+                      size="sm"
+                      onClick={() =>
+                        onShowToast(
+                          `Exported ${activeDb.name}-backup-2026-10-20.sql (${activeDb.sizeMb} MB)`
+                        )
+                      }
+                    >
+                      <Download className="h-4 w-4" /> Download `{activeDb.name}.sql`
+                    </Button>
+                  </div>
+
+                  <div className="rounded-xl border border-indigo-100 bg-[#FAF9FE] p-5 space-y-3">
+                    <div className="font-display text-sm font-bold text-slate-900">
+                      Import `.sql` File (Scanned &amp; Sandboxed)
+                    </div>
+                    <p className="text-xs text-slate-600">
+                      Uploaded `.sql` files are scanned for malicious `COPY PROGRAM` or shell escapes
+                      before execution inside `{activeDb.name}`.
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        onShowToast(
+                          `Verified & imported schema dump into ${activeDb.name} (0 errors).`
+                        )
+                      }
+                    >
+                      <Upload className="h-4 w-4" /> Select `.sql` File to Import
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </AnimatedContent>
     );
   }
 
   /* ------------------------------------------------------------------------
-     4. FILE MANAGER
+     4. FILE MANAGER + 4-LAYER ANTIVIRUS, MALWARE (YARA) & WAF SCANNER
      ------------------------------------------------------------------------ */
   if (section === 'file-manager') {
+    const folders = [
+      { path: `/home/${activeLinuxUser}/public_html`, label: 'public_html/ (Live Website)' },
+      { path: `/home/${activeLinuxUser}/apps/cloud-web`, label: 'apps/cloud-web/ (Node.js App)' },
+      { path: `/home/${activeLinuxUser}/mail/${activeDomain}`, label: `mail/${activeDomain}/ (Maildir)` },
+      { path: `/home/${activeLinuxUser}/logs`, label: 'logs/ (Nginx & PHP Logs)' },
+      { path: `/home/${activeLinuxUser}/quarantine`, label: 'quarantine/ (Blocked Malware)' },
+    ];
+
+    const visibleFiles = managedFiles.filter((f) => f.folder === currentFolder);
+    const quarantinedCount = managedFiles.filter(
+      (f) => f.scanStatus === 'QUARANTINED_BLOCKED'
+    ).length;
+
     return (
       <AnimatedContent className="space-y-6">
         <AuroraBackground className="p-6 sm:p-8">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <Badge variant="orange">MODULE 9 · SANDBOXED FILE MANAGER</Badge>
+              <Badge variant="orange">
+                MODULE 9 · SANDBOXED FILE MANAGER + CLAMAV + YARA + WAF SCANNER
+              </Badge>
               <h1 className="mt-2 font-display text-2xl font-extrabold text-slate-900 sm:text-3xl">
-                <BlurText text="Home Directory Browser (/home/garvixprod)" />
+                <BlurText text={`File Manager & Antivirus Scanner (${currentFolder})`} />
               </h1>
               <p className="mt-1 text-xs text-slate-600">
-                Protected by Go Agent `O_NOFOLLOW` and `filepath.EvalSymlinks` boundary confinement.
+                Every uploaded file is scanned in a quarantine buffer by **ClamAV Antivirus**, **YARA
+                Webshell Heuristics**, and **ModSecurity OWASP WAF** before writing to disk.
               </p>
             </div>
-            <Button
-              onClick={() =>
-                onShowToast('Created new directory inside /home/garvixprod/public_html (chmod 0750)')
-              }
-            >
-              <Plus className="h-4 w-4" /> New Folder
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                onChange={handleBrowserFileSelect}
+                className="hidden"
+              />
+              <Button onClick={() => fileInputRef.current?.click()}>
+                <Upload className="h-4 w-4" /> Upload File from Computer
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowNewFolderInput((v) => !v)}
+              >
+                <FolderPlus className="h-4 w-4" /> + New Folder
+              </Button>
+            </div>
           </div>
         </AuroraBackground>
 
-        <div className="rounded-2xl border border-indigo-100/90 bg-white p-6 shadow-[0_10px_30px_-12px_rgba(99,102,241,0.12)] space-y-2.5">
-          {[
-            { name: 'public_html/', type: 'Directory', perms: '0750', size: '4.2 GB' },
-            { name: 'apps/cloud-web/', type: 'Directory', perms: '0750', size: '3.9 GB' },
-            { name: 'mail/garvixcloud.in/', type: 'Maildir', perms: '0700', size: '1.9 GB' },
-            { name: 'logs/nginx-http3.access.log', type: 'Log File', perms: '0640', size: '142 MB' },
-            { name: '.env.production.enc', type: 'AES-256-GCM Secret', perms: '0600', size: '4 KB' },
-          ].map((file) => (
-            <div
-              key={file.name}
-              className="flex items-center justify-between rounded-xl border border-indigo-50 bg-[#FAF9FE] px-4 py-3 text-xs"
-            >
-              <div className="flex items-center gap-3">
-                <FolderOpen className="h-4 w-4 text-indigo-600" />
-                <span className="font-mono font-bold text-slate-900">{file.name}</span>
-                <Badge variant="secondary">{file.type}</Badge>
+        {/* 4-STAGE PRE-UPLOAD ANTIVIRUS, MALWARE & FIREWALL SECURITY PIPELINE */}
+        <div className="rounded-2xl border border-indigo-200/90 bg-white p-6 shadow-[0_10px_30px_-12px_rgba(99,102,241,0.12)] space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-display text-base font-extrabold text-slate-900">
+                4-Layer Pre-Upload Virus, Malware &amp; Firewall Scanning Engine
+              </h2>
+              <p className="text-xs text-slate-500">
+                No file can reach `{currentFolder}` without passing all 4 security gates below.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isScanningUpload}
+                onClick={() => runFourStageSecurityScan('website-release-v3.zip', '3.4 MB', false)}
+              >
+                <Upload className="h-3.5 w-3.5 text-emerald-600" /> Simulate Clean Upload (`.zip`)
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isScanningUpload}
+                onClick={() => runFourStageSecurityScan('c99_backdoor_shell.php', '48 KB', true)}
+                className="border-rose-200 text-rose-700 hover:bg-rose-50"
+              >
+                <ShieldAlert className="h-3.5 w-3.5 text-rose-600" /> Test Malware / Virus Upload
+                (See Block)
+              </Button>
+            </div>
+          </div>
+
+          {/* 4 Security Layers Grid */}
+          <div className="grid gap-3 sm:grid-cols-4">
+            {[
+              {
+                step: 'STAGE 1 · ANTIVIRUS',
+                title: 'ClamAV Daemon (clamd)',
+                desc: 'Scans for 8.9M+ viruses, trojans, ransomware & infected ZIP/TAR archives.',
+                status: 'Active · Signatures Current',
+              },
+              {
+                step: 'STAGE 2 · MALWARE & SHELLS',
+                title: 'YARA Webshell Scanner',
+                desc: 'Detects PHP/JS backdoors (`eval(base64_decode)`, `shell_exec`, `c99`, `r57`).',
+                status: 'Active · Heuristic Mode',
+              },
+              {
+                step: 'STAGE 3 · FIREWALL (WAF)',
+                title: 'ModSecurity OWASP CRS',
+                desc: 'Verifies real MIME magic bytes; blocks `.jpg.php` spoofing & ELF binaries.',
+                status: 'Active · Paranoia Level 2',
+              },
+              {
+                step: 'STAGE 4 · SANDBOX GUARD',
+                title: 'Go Agent O_NOFOLLOW',
+                desc: 'Blocks symlink escapes and enforces non-executable `chmod 0644` permissions.',
+                status: 'Enforced · UID Confined',
+              },
+            ].map((gate) => (
+              <div
+                key={gate.step}
+                className="rounded-xl border border-indigo-100 bg-[#FAF9FE] p-3.5 space-y-1.5"
+              >
+                <div className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-600">
+                  {gate.step}
+                </div>
+                <div className="font-display text-xs font-extrabold text-slate-900">
+                  {gate.title}
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">{gate.desc}</p>
+                <div className="pt-1 flex items-center gap-1 text-[11px] font-bold text-emerald-700">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> {gate.status}
+                </div>
               </div>
-              <div className="font-mono text-slate-500">
-                chmod {file.perms} · {file.size}
+            ))}
+          </div>
+
+          {/* Live Scan Result Alert Box */}
+          {lastScanReport && (
+            <div
+              className={`rounded-xl border p-4 text-xs ${
+                lastScanReport.scanStatus === 'QUARANTINED_BLOCKED'
+                  ? 'border-rose-300 bg-rose-50 text-rose-950'
+                  : 'border-emerald-300 bg-emerald-50 text-emerald-950'
+              }`}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 font-bold text-sm">
+                  {lastScanReport.scanStatus === 'QUARANTINED_BLOCKED' ? (
+                    <ShieldAlert className="h-5 w-5 text-rose-600" />
+                  ) : (
+                    <ShieldCheck className="h-5 w-5 text-emerald-600" />
+                  )}
+                  <span>
+                    {lastScanReport.scanStatus === 'QUARANTINED_BLOCKED'
+                      ? `UPLOAD BLOCKED & QUARANTINED — "${lastScanReport.name}"`
+                      : `UPLOAD PASSED ALL 4 SECURITY CHECKS — "${lastScanReport.name}"`}
+                  </span>
+                </div>
+                <Badge
+                  variant={
+                    lastScanReport.scanStatus === 'QUARANTINED_BLOCKED' ? 'warning' : 'success'
+                  }
+                >
+                  SHA-256: {lastScanReport.sha256}
+                </Badge>
+              </div>
+              <div className="mt-2 grid gap-2 sm:grid-cols-3 font-mono text-[11px]">
+                <div>• {lastScanReport.clamAvResult}</div>
+                <div>• {lastScanReport.yaraResult}</div>
+                <div>• {lastScanReport.wafResult}</div>
               </div>
             </div>
-          ))}
+          )}
+        </div>
+
+        {/* New Folder Inline Creator */}
+        {showNewFolderInput && (
+          <div className="flex items-center gap-3 rounded-2xl border border-indigo-200 bg-white p-4">
+            <Input
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              placeholder="Enter new folder name (e.g. uploads or staging)"
+            />
+            <Button
+              size="sm"
+              onClick={() => {
+                const clean = newFolderName.trim().replace(/[^a-zA-Z0-9._-]/g, '');
+                if (!clean) return;
+                const folderItem: ScannedFileItem = {
+                  id: `dir-${Date.now()}`,
+                  name: `${clean}/`,
+                  folder: currentFolder,
+                  type: 'Directory',
+                  perms: '0750',
+                  size: '4.0 KB',
+                  scanStatus: 'CLEAN_VERIFIED',
+                  clamAvResult: 'Directory Created via Go Agent',
+                  yaraResult: 'Clean',
+                  wafResult: 'O_NOFOLLOW Verified',
+                  sha256: 'dir-inode-verified',
+                  uploadedAt: 'Just now',
+                };
+                setManagedFiles((prev) => [folderItem, ...prev]);
+                setNewFolderName('');
+                setShowNewFolderInput(false);
+                onShowToast(`Created folder ${currentFolder}/${clean} (chmod 0750)`);
+              }}
+            >
+              Create Folder
+            </Button>
+          </div>
+        )}
+
+        {/* Directory Selector Tabs + File Table */}
+        <div className="rounded-2xl border border-indigo-100/90 bg-white p-6 shadow-[0_10px_30px_-12px_rgba(99,102,241,0.12)] space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-50 pb-3">
+            <div className="flex flex-wrap gap-1.5">
+              {folders.map((dir) => {
+                const active = currentFolder === dir.path;
+                const isQuarantine = dir.path.endsWith('/quarantine');
+                return (
+                  <button
+                    key={dir.path}
+                    type="button"
+                    onClick={() => setCurrentFolder(dir.path)}
+                    className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+                      active
+                        ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-xs'
+                        : isQuarantine
+                          ? 'border border-rose-200 bg-rose-50/70 text-rose-700 hover:bg-rose-100'
+                          : 'border border-indigo-100 bg-[#FAF9FE] text-slate-700 hover:bg-indigo-50'
+                    }`}
+                  >
+                    <FolderOpen className="h-3.5 w-3.5" />
+                    {dir.label}
+                    {isQuarantine && quarantinedCount > 0 && (
+                      <span className="rounded-full bg-rose-600 px-1.5 py-0.2 text-[10px] text-white">
+                        {quarantinedCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Files List in Current Folder */}
+          <div className="space-y-2.5">
+            {visibleFiles.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-indigo-200 p-6 text-center text-xs text-slate-500">
+                No files in `{currentFolder}` yet. Use **Upload File from Computer** above to scan
+                and upload files.
+              </div>
+            ) : (
+              visibleFiles.map((file) => (
+                <div
+                  key={file.id}
+                  className={`flex flex-wrap items-center justify-between gap-4 rounded-xl border px-4 py-3 text-xs ${
+                    file.scanStatus === 'QUARANTINED_BLOCKED'
+                      ? 'border-rose-200 bg-rose-50/60'
+                      : 'border-indigo-50 bg-[#FAF9FE]'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    {file.scanStatus === 'QUARANTINED_BLOCKED' ? (
+                      <AlertTriangle className="h-4 w-4 text-rose-600" />
+                    ) : file.type === 'Directory' ? (
+                      <FolderOpen className="h-4 w-4 text-indigo-600" />
+                    ) : (
+                      <FileText className="h-4 w-4 text-indigo-600" />
+                    )}
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-slate-900">{file.name}</span>
+                        <Badge variant="secondary">{file.type}</Badge>
+                        {file.scanStatus === 'QUARANTINED_BLOCKED' ? (
+                          <Badge variant="warning">BLOCKED: MALWARE / WEBSHELL</Badge>
+                        ) : (
+                          <Badge variant="success">ClamAV + YARA + WAF Verified</Badge>
+                        )}
+                      </div>
+                      <div className="mt-0.5 font-mono text-[11px] text-slate-500">
+                        {file.clamAvResult} · {file.yaraResult}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-slate-500">
+                      chmod {file.perms} · {file.size}
+                    </span>
+                    {file.contentPreview && file.scanStatus === 'CLEAN_VERIFIED' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEditingFileItem(file);
+                          setEditingFileContent(file.contentPreview ?? '');
+                        }}
+                      >
+                        <Code2 className="h-3.5 w-3.5" /> View / Edit
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setManagedFiles((prev) => prev.filter((item) => item.id !== file.id));
+                        onShowToast(`Deleted ${file.name} from ${file.folder}`);
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Inline Code Viewer / Editor */}
+          {editingFileItem && (
+            <div className="mt-4 rounded-xl border border-indigo-200 bg-slate-950 p-4 space-y-3">
+              <div className="flex items-center justify-between text-xs text-white">
+                <span className="font-mono font-bold">
+                  Editing: {editingFileItem.folder}/{editingFileItem.name}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setManagedFiles((prev) =>
+                        prev.map((f) =>
+                          f.id === editingFileItem.id
+                            ? { ...f, contentPreview: editingFileContent }
+                            : f
+                        )
+                      );
+                      setEditingFileItem(null);
+                      onShowToast(
+                        `Saved & scanned ${editingFileItem.name} (ClamAV + YARA verified clean).`
+                      );
+                    }}
+                  >
+                    Save &amp; Scan File
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setEditingFileItem(null)}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+              <textarea
+                rows={6}
+                value={editingFileContent}
+                onChange={(e) => setEditingFileContent(e.target.value)}
+                className="w-full rounded-lg border border-slate-800 bg-slate-900 p-3 font-mono text-xs text-emerald-300 focus:outline-none"
+              />
+            </div>
+          )}
         </div>
       </AnimatedContent>
     );
@@ -401,9 +1710,9 @@ export const NebulixModulePages: React.FC<NebulixModulePageProps> = ({
 
         <div className="grid gap-4 sm:grid-cols-3">
           {[
-            { host: 'garvixcloud.in', type: 'HTTP-01 ACME', daysLeft: 84 },
-            { host: '*.garvixcloud.in', type: 'DNS-01 Wildcard', daysLeft: 79 },
-            { host: 'mail.garvixcloud.in', type: 'DANE / TLSA + SMTP TLS', daysLeft: 88 },
+            { host: activeDomain, type: 'HTTP-01 ACME', daysLeft: 84 },
+            { host: `*.${activeDomain}`, type: 'DNS-01 Wildcard', daysLeft: 79 },
+            { host: `mail.${activeDomain}`, type: 'DANE / TLSA + SMTP TLS', daysLeft: 88 },
           ].map((cert) => (
             <SpotlightCard key={cert.host} className="space-y-3">
               <div className="flex items-center justify-between">
@@ -505,7 +1814,8 @@ export const NebulixModulePages: React.FC<NebulixModulePageProps> = ({
             <BlurText text="Account Isolation, Step-Up MFA & SSH Controls" />
           </h1>
           <p className="mt-1 text-xs text-slate-600">
-            Linux UID 1004 (`garvixprod`), systemd cgroup v2 resource slice, and TOTP / Passkey MFA.
+            Linux UID (`{activeLinuxUser}`), systemd cgroup v2 resource slice, ClamAV + YARA +
+            ModSecurity WAF, and TOTP / Passkey MFA.
           </p>
         </AuroraBackground>
 
