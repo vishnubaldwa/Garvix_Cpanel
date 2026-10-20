@@ -1,0 +1,1014 @@
+// =============================================================================
+// Garvix Hosting Manager — Cloud Control Plane Prisma Schema
+// Garvix Software Solutions Pvt Ltd
+// Database: PostgreSQL 16+ (DATABASE_CLOUD_URL)
+// Strict Physical & Logical Isolation from Customer Local Panel Databases
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/cloud-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_CLOUD_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum OrganizationStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+  CLOSED
+}
+
+enum MemberStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REMOVED
+}
+
+enum AuthenticatorType {
+  TOTP
+  WEBAUTHN_PASSKEY
+  RECOVERY_CODES
+}
+
+enum RoleScope {
+  CLOUD_PLATFORM
+  ORGANIZATION
+}
+
+enum TaxExemptionStatus {
+  NONE
+  SEZ_EXEMPT
+  EXPORT_LUT
+  DIPLOMATIC_EXEMPT
+}
+
+enum CurrencyCode {
+  INR
+  USD
+  EUR
+  GBP
+}
+
+enum OsFamily {
+  UBUNTU
+  DEBIAN
+  ALMALINUX
+  ROCKY_LINUX
+  RHEL
+}
+
+enum ServerEnrollmentStatus {
+  PENDING_ENROLLMENT
+  ENROLLED
+  MTLS_ACTIVE
+  QUARANTINED
+  DECOMMISSIONED
+}
+
+enum CertificateStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+  SUPERSEDED
+}
+
+enum LicenseTier {
+  TRIAL
+  MONTHLY
+  ANNUAL
+  RESELLER
+  ENTERPRISE
+}
+
+enum LicenseStatus {
+  ISSUED
+  ACTIVE
+  GRACE_PERIOD
+  SUSPENDED
+  EXPIRED
+  REVOKED
+}
+
+enum LicenseValidationResult {
+  VALID
+  GRACE_PERIOD
+  EXPIRED
+  REVOKED
+  HARDWARE_MISMATCH
+  IP_MISMATCH
+  SIGNATURE_INVALID
+  ACCOUNT_LIMIT_EXCEEDED
+}
+
+enum BillingCycle {
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+  CUSTOM
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  PAUSED
+  CANCELLED
+  EXPIRED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  PARTIALLY_PAID
+  VOID
+  OVERDUE
+  REFUNDED
+}
+
+enum PaymentProvider {
+  RAZORPAY
+  STRIPE
+  CASHFREE
+  BANK_TRANSFER_NEFT_RTGS
+  MANUAL_ADJUSTMENT
+}
+
+enum PaymentStatus {
+  INITIATED
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  REFUNDED
+  DISPUTED
+}
+
+enum WebhookProcessingStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  IGNORED_DUPLICATE
+  FAILED_SIGNATURE
+  FAILED_PROCESSING
+}
+
+enum SoftwareComponent {
+  PANEL
+  AGENT
+  INSTALLER
+  CLI
+}
+
+enum UpdateChannelName {
+  STABLE
+  BETA
+  SECURITY
+}
+
+enum CpuArch {
+  X86_64
+  AARCH64
+}
+
+enum UpdateExecutionStatus {
+  PREFLIGHT
+  DOWNLOADING
+  VERIFYING_SIGNATURE
+  APPLYING
+  HEALTH_CHECKING
+  SUCCEEDED
+  FAILED
+  ROLLED_BACK
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_ON_CUSTOMER
+  RESOLVED
+  CLOSED
+}
+
+enum SecuritySeverity {
+  INFO
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// =============================================================================
+// 1. IAM, TENANCY & RBAC MODELS
+// =============================================================================
+
+model Organization {
+  id                  String             @id @default(uuid()) @db.Uuid
+  slug                String             @unique @db.VarChar(100)
+  name                String             @db.VarChar(255)
+  legalName           String?            @db.VarChar(255)
+  status              OrganizationStatus @default(ACTIVE)
+  primaryContactEmail String             @db.VarChar(320)
+  supportTier         String             @default("STANDARD") @db.VarChar(50)
+  metadataJson        Json?              @db.JsonB
+  createdAt           DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime           @updatedAt @db.Timestamptz(6)
+  deletedAt           DateTime?          @db.Timestamptz(6)
+
+  members                 OrganizationMember[]
+  customerProfile         CustomerProfile?
+  servers                 Server[]
+  serverEnrollments       ServerEnrollment[]
+  serverAgentCertificates ServerAgentCertificate[]
+  serverHeartbeats        ServerHeartbeat[]
+  licenses                License[]
+  licenseActivations      LicenseActivation[]
+  licenseValidationEvents LicenseValidationEvent[]
+  subscriptions           Subscription[]
+  invoices                Invoice[]
+  payments                Payment[]
+  creditNotes             CreditNote[]
+  serverUpdateHistory     ServerUpdateHistory[]
+  supportTickets          SupportTicket[]
+  securityEvents          SecurityEvent[]
+  auditLogs               AuditLog[]
+  roles                   Role[]
+
+  @@index([status, deletedAt])
+  @@index([createdAt])
+  @@map("organizations")
+}
+
+model User {
+  id                  String    @id @default(uuid()) @db.Uuid
+  email               String    @unique @db.VarChar(320)
+  fullName            String    @db.VarChar(255)
+  phoneE164           String?   @db.VarChar(32)
+  passwordArgon2Hash  String    @db.Text
+  passwordSaltVersion Int       @default(1)
+  passwordChangedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  mfaEnforced         Boolean   @default(true)
+  isEmailVerified     Boolean   @default(false)
+  emailVerifiedAt     DateTime? @db.Timestamptz(6)
+  isPlatformStaff     Boolean   @default(false)
+  isActive            Boolean   @default(true)
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime? @db.Timestamptz(6)
+  lastLoginAt         DateTime? @db.Timestamptz(6)
+  lastLoginIp         String?   @db.VarChar(64)
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt           DateTime? @db.Timestamptz(6)
+
+  memberships    OrganizationMember[]
+  authenticators UserAuthenticator[]
+  supportTickets SupportTicket[]      @relation("TicketCreatedBy")
+  securityEvents SecurityEvent[]      @relation("SecurityEventActor")
+  auditLogs      AuditLog[]           @relation("AuditLogActor")
+
+  @@index([isActive, deletedAt])
+  @@index([isPlatformStaff, isActive])
+  @@map("users")
+}
+
+model UserAuthenticator {
+  id                       String            @id @default(uuid()) @db.Uuid
+  userId                   String            @db.Uuid
+  type                     AuthenticatorType
+  label                    String            @db.VarChar(120)
+  // Envelope-encrypted TOTP secret or WebAuthn public key material (never plaintext)
+  encryptedSecretCiphertext String?          @db.Text
+  secretKeyId              String?           @db.VarChar(128)
+  secretIv                 String?           @db.VarChar(64)
+  secretAuthTag            String?           @db.VarChar(64)
+  webauthnCredentialId     String?           @unique @db.VarChar(512)
+  webauthnPublicKeyCose    String?           @db.Text
+  webauthnSignCount        BigInt            @default(0)
+  recoveryCodeHashesJson   Json?             @db.JsonB
+  isPrimary                Boolean           @default(false)
+  lastUsedAt               DateTime?         @db.Timestamptz(6)
+  createdAt                DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime          @updatedAt @db.Timestamptz(6)
+  deletedAt                DateTime?         @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type, deletedAt])
+  @@map("user_authenticators")
+}
+
+model OrganizationMember {
+  id              String       @id @default(uuid()) @db.Uuid
+  organizationId  String       @db.Uuid
+  userId          String       @db.Uuid
+  status          MemberStatus @default(ACTIVE)
+  invitedByUserId String?      @db.Uuid
+  inviteTokenHash String?      @unique @db.VarChar(128)
+  joinedAt        DateTime?    @db.Timestamptz(6)
+  createdAt       DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime     @updatedAt @db.Timestamptz(6)
+  deletedAt       DateTime?    @db.Timestamptz(6)
+
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memberRoles  OrganizationMemberRole[]
+
+  @@unique([organizationId, userId])
+  @@index([organizationId, status, deletedAt])
+  @@index([userId, status])
+  @@map("organization_members")
+}
+
+model Role {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String?   @db.Uuid
+  code           String    @unique @db.VarChar(100)
+  name           String    @db.VarChar(150)
+  description    String    @db.Text
+  scope          RoleScope @default(ORGANIZATION)
+  isSystemRole   Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime? @db.Timestamptz(6)
+
+  organization    Organization?            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  rolePermissions RolePermission[]
+  memberRoles     OrganizationMemberRole[]
+
+  @@index([organizationId, scope, deletedAt])
+  @@map("roles")
+}
+
+model Permission {
+  id          String    @id @default(uuid()) @db.Uuid
+  key         String    @unique @db.VarChar(150)
+  module      String    @db.VarChar(80)
+  description String    @db.Text
+  isHighRisk  Boolean   @default(false)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt   DateTime? @db.Timestamptz(6)
+
+  rolePermissions RolePermission[]
+
+  @@index([module, deletedAt])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String?   @db.Uuid
+  roleId         String    @db.Uuid
+  permissionId   String    @db.Uuid
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime? @db.Timestamptz(6)
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([organizationId, roleId])
+  @@map("role_permissions")
+}
+
+model OrganizationMemberRole {
+  id                   String    @id @default(uuid()) @db.Uuid
+  organizationId       String    @db.Uuid
+  organizationMemberId String    @db.Uuid
+  roleId               String    @db.Uuid
+  assignedByUserId     String?   @db.Uuid
+  createdAt            DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt            DateTime? @db.Timestamptz(6)
+
+  organizationMember OrganizationMember @relation(fields: [organizationMemberId], references: [id], onDelete: Cascade)
+  role               Role               @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationMemberId, roleId])
+  @@index([organizationId, roleId])
+  @@map("organization_member_roles")
+}
+
+model CustomerProfile {
+  id                 String             @id @default(uuid()) @db.Uuid
+  organizationId     String             @unique @db.Uuid
+  legalEntityName    String             @db.VarChar(255)
+  gstin              String?            @db.VarChar(15)
+  panNumber          String?            @db.VarChar(10)
+  billingAddressLine1 String            @db.VarChar(255)
+  billingAddressLine2 String?           @db.VarChar(255)
+  city               String             @db.VarChar(120)
+  stateName          String             @db.VarChar(120)
+  stateCode          String             @db.VarChar(10)
+  postalCode         String             @db.VarChar(20)
+  countryCode        String             @default("IN") @db.VarChar(2)
+  taxExemptionStatus TaxExemptionStatus @default(NONE)
+  lutReferenceNumber String?            @db.VarChar(100)
+  currency           CurrencyCode       @default(INR)
+  billingEmail       String             @db.VarChar(320)
+  createdAt          DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime           @updatedAt @db.Timestamptz(6)
+  deletedAt          DateTime?          @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([gstin])
+  @@index([stateCode, countryCode])
+  @@map("customer_profiles")
+}
+
+// =============================================================================
+// 2. SERVER FLEET, ENROLLMENT & MTLS IDENTITY MODELS
+// =============================================================================
+
+model Server {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  organizationId      String                 @db.Uuid
+  hostname            String                 @db.VarChar(255)
+  displayName         String                 @db.VarChar(150)
+  hardwareFingerprint String                 @unique @db.VarChar(128)
+  machineIdHash       String                 @db.VarChar(128)
+  osFamily            OsFamily
+  osVersion           String                 @db.VarChar(64)
+  kernelVersion       String                 @db.VarChar(128)
+  cpuArch             CpuArch                @default(X86_64)
+  cpuCores            Int
+  ramTotalMb          Int
+  diskCapacityGb      Int
+  primaryIp           String                 @db.VarChar(64)
+  ipv6Address         String?                @db.VarChar(128)
+  enrollmentStatus    ServerEnrollmentStatus @default(PENDING_ENROLLMENT)
+  updateChannelId     String?                @db.Uuid
+  installedPanelVer   String?                @db.VarChar(64)
+  installedAgentVer   String?                @db.VarChar(64)
+  lastHeartbeatAt     DateTime?              @db.Timestamptz(6)
+  createdAt           DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime               @updatedAt @db.Timestamptz(6)
+  deletedAt           DateTime?              @db.Timestamptz(6)
+
+  organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  updateChannel           UpdateChannel?           @relation(fields: [updateChannelId], references: [id], onDelete: SetNull)
+  enrollments             ServerEnrollment[]
+  agentCertificates       ServerAgentCertificate[]
+  heartbeats              ServerHeartbeat[]
+  boundLicenses           License[]                @relation("BoundServerLicense")
+  licenseActivations      LicenseActivation[]
+  licenseValidationEvents LicenseValidationEvent[]
+  updateHistory           ServerUpdateHistory[]
+  supportTickets          SupportTicket[]
+  securityEvents          SecurityEvent[]
+
+  @@unique([organizationId, hostname])
+  @@index([organizationId, enrollmentStatus, deletedAt])
+  @@index([primaryIp])
+  @@index([lastHeartbeatAt])
+  @@map("servers")
+}
+
+model ServerEnrollment {
+  id                  String    @id @default(uuid()) @db.Uuid
+  organizationId      String    @db.Uuid
+  serverId            String    @db.Uuid
+  enrollmentTokenHash String    @unique @db.VarChar(128)
+  csrPem              String    @db.Text
+  mtlsIdentitySpiffe  String    @unique @db.VarChar(255)
+  requestedByIp       String    @db.VarChar(64)
+  expiresAt           DateTime  @db.Timestamptz(6)
+  consumedAt          DateTime? @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt           DateTime? @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  server       Server       @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, serverId])
+  @@index([expiresAt, consumedAt])
+  @@map("server_enrollments")
+}
+
+model ServerAgentCertificate {
+  id                String            @id @default(uuid()) @db.Uuid
+  organizationId    String            @db.Uuid
+  serverId          String            @db.Uuid
+  serialNumberHex   String            @unique @db.VarChar(128)
+  sha256Fingerprint String            @unique @db.VarChar(128)
+  subjectDn         String            @db.VarChar(255)
+  status            CertificateStatus @default(ACTIVE)
+  issuedAt          DateTime          @db.Timestamptz(6)
+  expiresAt         DateTime          @db.Timestamptz(6)
+  revokedAt         DateTime?         @db.Timestamptz(6)
+  revocationReason  String?           @db.VarChar(255)
+  createdAt         DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime          @updatedAt @db.Timestamptz(6)
+  deletedAt         DateTime?         @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  server       Server       @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, serverId, status])
+  @@index([expiresAt, status])
+  @@map("server_agent_certificates")
+}
+
+model ServerHeartbeat {
+  id                  String    @id @default(uuid()) @db.Uuid
+  organizationId      String    @db.Uuid
+  serverId            String    @db.Uuid
+  agentVersion        String    @db.VarChar(64)
+  panelVersion        String    @db.VarChar(64)
+  loadAvg1m           Decimal   @db.Decimal(6, 2)
+  loadAvg5m           Decimal   @db.Decimal(6, 2)
+  loadAvg15m          Decimal   @db.Decimal(6, 2)
+  memoryUsedMb        Int
+  diskUsedGb          Int
+  hostedAccountsCount Int       @default(0)
+  servicesHealthy     Boolean   @default(true)
+  serviceStatusJson   Json      @db.JsonB
+  reportedIp          String    @db.VarChar(64)
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt           DateTime? @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  server       Server       @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId, createdAt(sort: Desc)])
+  @@index([organizationId, servicesHealthy, createdAt(sort: Desc)])
+  @@map("server_heartbeats")
+}
+
+// =============================================================================
+// 3. LICENSING & CRYPTOGRAPHIC ENTITLEMENT MODELS
+// =============================================================================
+
+model LicensePlan {
+  id                String       @id @default(uuid()) @db.Uuid
+  code              String       @unique @db.VarChar(64)
+  name              String       @db.VarChar(150)
+  tier              LicenseTier
+  maxAccounts       Int
+  maxServers        Int          @default(1)
+  offlineGraceHours Int          @default(72)
+  pricePaise        BigInt
+  currency          CurrencyCode @default(INR)
+  billingCycle      BillingCycle @default(MONTHLY)
+  isPublic          Boolean      @default(true)
+  featuresJson      Json         @db.JsonB
+  createdAt         DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime     @updatedAt @db.Timestamptz(6)
+  deletedAt         DateTime?    @db.Timestamptz(6)
+
+  licenses      License[]
+  subscriptions Subscription[]
+
+  @@index([tier, isPublic, deletedAt])
+  @@map("license_plans")
+}
+
+model License {
+  id               String        @id @default(uuid()) @db.Uuid
+  organizationId   String        @db.Uuid
+  planId           String        @db.Uuid
+  subscriptionId   String?       @db.Uuid
+  boundServerId    String?       @db.Uuid
+  licenseKeyPrefix String        @db.VarChar(24)
+  licenseKeyHash   String        @unique @db.VarChar(128)
+  status           LicenseStatus @default(ISSUED)
+  ed25519KeyId     String        @db.VarChar(64)
+  ed25519Signature String        @db.Text
+  signedPayloadJson Json         @db.JsonB
+  maxAccountsOverride Int?
+  issuedAt         DateTime      @db.Timestamptz(6)
+  expiresAt        DateTime      @db.Timestamptz(6)
+  graceEndsAt      DateTime      @db.Timestamptz(6)
+  lastValidatedAt  DateTime?     @db.Timestamptz(6)
+  revokedAt        DateTime?     @db.Timestamptz(6)
+  revokedReason    String?       @db.VarChar(255)
+  createdAt        DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime      @updatedAt @db.Timestamptz(6)
+  deletedAt        DateTime?     @db.Timestamptz(6)
+
+  organization     Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  plan             LicensePlan              @relation(fields: [planId], references: [id], onDelete: Restrict)
+  subscription     Subscription?            @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  boundServer      Server?                  @relation("BoundServerLicense", fields: [boundServerId], references: [id], onDelete: SetNull)
+  entitlements     LicenseEntitlement[]
+  activations      LicenseActivation[]
+  validationEvents LicenseValidationEvent[]
+
+  @@index([organizationId, status, deletedAt])
+  @@index([boundServerId, status])
+  @@index([expiresAt, status])
+  @@map("licenses")
+}
+
+model LicenseEntitlement {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @db.Uuid
+  licenseId      String    @db.Uuid
+  featureKey     String    @db.VarChar(100)
+  limitValue     Int?
+  enabled        Boolean   @default(true)
+  metadataJson   Json?     @db.JsonB
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime? @db.Timestamptz(6)
+
+  license License @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+
+  @@unique([licenseId, featureKey])
+  @@index([organizationId, featureKey])
+  @@map("license_entitlements")
+}
+
+model LicenseActivation {
+  id                  String    @id @default(uuid()) @db.Uuid
+  organizationId      String    @db.Uuid
+  licenseId           String    @db.Uuid
+  serverId            String    @db.Uuid
+  hardwareFingerprint String    @db.VarChar(128)
+  ipAddress           String    @db.VarChar(64)
+  agentVersion        String    @db.VarChar(64)
+  activatedAt         DateTime  @default(now()) @db.Timestamptz(6)
+  deactivatedAt       DateTime? @db.Timestamptz(6)
+  deactivationReason  String?   @db.VarChar(255)
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt           DateTime? @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  license      License      @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  server       Server       @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([licenseId, deactivatedAt])
+  @@index([organizationId, serverId])
+  @@map("license_activations")
+}
+
+model LicenseValidationEvent {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  organizationId      String                  @db.Uuid
+  licenseId           String                  @db.Uuid
+  serverId            String                  @db.Uuid
+  result              LicenseValidationResult
+  agentVersion        String                  @db.VarChar(64)
+  ipAddress           String                  @db.VarChar(64)
+  hardwareFingerprint String                  @db.VarChar(128)
+  reportedAccounts    Int                     @default(0)
+  responseLatencyMs   Int                     @default(0)
+  createdAt           DateTime                @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime                @updatedAt @db.Timestamptz(6)
+  deletedAt           DateTime?               @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  license      License      @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  server       Server       @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([licenseId, createdAt(sort: Desc)])
+  @@index([organizationId, result, createdAt(sort: Desc)])
+  @@index([serverId, createdAt(sort: Desc)])
+  @@map("license_validation_events")
+}
+
+// =============================================================================
+// 4. SUBSCRIPTIONS, GST BILLING & PAYMENTS MODELS
+// =============================================================================
+
+model Subscription {
+  id                     String             @id @default(uuid()) @db.Uuid
+  organizationId         String             @db.Uuid
+  planId                 String             @db.Uuid
+  billingCycle           BillingCycle
+  status                 SubscriptionStatus @default(ACTIVE)
+  quantity               Int                @default(1)
+  currentPeriodStart     DateTime           @db.Timestamptz(6)
+  currentPeriodEnd       DateTime           @db.Timestamptz(6)
+  cancelAtPeriodEnd      Boolean            @default(false)
+  cancelledAt            DateTime?          @db.Timestamptz(6)
+  provider               PaymentProvider    @default(RAZORPAY)
+  providerSubscriptionId String?            @unique @db.VarChar(128)
+  createdAt              DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime           @updatedAt @db.Timestamptz(6)
+  deletedAt              DateTime?          @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  plan         LicensePlan  @relation(fields: [planId], references: [id], onDelete: Restrict)
+  licenses     License[]
+  invoices     Invoice[]
+
+  @@index([organizationId, status, deletedAt])
+  @@index([currentPeriodEnd, status])
+  @@map("subscriptions")
+}
+
+model Invoice {
+  id             String        @id @default(uuid()) @db.Uuid
+  invoiceNumber  String        @unique @db.VarChar(64)
+  organizationId String        @db.Uuid
+  subscriptionId String?       @db.Uuid
+  currency       CurrencyCode  @default(INR)
+  subtotalPaise  BigInt
+  cgstPaise      BigInt        @default(0)
+  sgstPaise      BigInt        @default(0)
+  igstPaise      BigInt        @default(0)
+  totalPaise     BigInt
+  customerGstin  String?       @db.VarChar(15)
+  supplierGstin  String        @db.VarChar(15)
+  placeOfSupply  String        @db.VarChar(64)
+  status         InvoiceStatus @default(ISSUED)
+  issuedAt       DateTime      @db.Timestamptz(6)
+  dueAt          DateTime      @db.Timestamptz(6)
+  paidAt         DateTime?     @db.Timestamptz(6)
+  pdfStorageRef  String?       @db.VarChar(512)
+  immutableHash  String        @unique @db.VarChar(128)
+  createdAt      DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime?     @db.Timestamptz(6)
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  items        InvoiceItem[]
+  payments     Payment[]
+  creditNotes  CreditNote[]
+
+  @@index([organizationId, status, issuedAt(sort: Desc)])
+  @@index([dueAt, status])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @db.Uuid
+  invoiceId      String    @db.Uuid
+  description    String    @db.VarChar(500)
+  sacCode        String    @default("998315") @db.VarChar(16)
+  quantity       Int       @default(1)
+  unitPricePaise BigInt
+  amountPaise    BigInt
+  taxRateBps     Int       @default(1800)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime? @db.Timestamptz(6)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([organizationId, sacCode])
+  @@map("invoice_items")
+}
+
+model Payment {
+  id                String          @id @default(uuid()) @db.Uuid
+  invoiceId         String          @db.Uuid
+  organizationId    String          @db.Uuid
+  provider          PaymentProvider
+  providerPaymentId String          @unique @db.VarChar(128)
+  providerOrderId   String?         @db.VarChar(128)
+  amountPaise       BigInt
+  currency          CurrencyCode    @default(INR)
+  status            PaymentStatus   @default(INITIATED)
+  paymentMethod     String?         @db.VarChar(64)
+  idempotencyKey    String          @unique @db.VarChar(128)
+  failureReason     String?         @db.VarChar(255)
+  paidAt            DateTime?       @db.Timestamptz(6)
+  createdAt         DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime        @updatedAt @db.Timestamptz(6)
+  deletedAt         DateTime?       @db.Timestamptz(6)
+
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, status, createdAt(sort: Desc)])
+  @@index([invoiceId, status])
+  @@map("payments")
+}
+
+model PaymentWebhookEvent {
+  id                String                  @id @default(uuid()) @db.Uuid
+  organizationId    String?                 @db.Uuid
+  provider          PaymentProvider
+  eventId           String                  @db.VarChar(128)
+  eventType         String                  @db.VarChar(128)
+  signatureVerified Boolean                 @default(false)
+  payloadJson       Json                    @db.JsonB
+  status            WebhookProcessingStatus @default(RECEIVED)
+  errorMessage      String?                 @db.Text
+  processedAt       DateTime?               @db.Timestamptz(6)
+  createdAt         DateTime                @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime                @updatedAt @db.Timestamptz(6)
+  deletedAt         DateTime?               @db.Timestamptz(6)
+
+  @@unique([provider, eventId])
+  @@index([status, createdAt])
+  @@index([organizationId, eventType])
+  @@map("payment_webhook_events")
+}
+
+model CreditNote {
+  id                 String       @id @default(uuid()) @db.Uuid
+  creditNoteNumber   String       @unique @db.VarChar(64)
+  invoiceId          String       @db.Uuid
+  organizationId     String       @db.Uuid
+  reason             String       @db.VarChar(500)
+  currency           CurrencyCode @default(INR)
+  subtotalPaise      BigInt
+  taxAdjustmentPaise BigInt
+  totalPaise         BigInt
+  immutableHash      String       @unique @db.VarChar(128)
+  issuedAt           DateTime     @db.Timestamptz(6)
+  createdAt          DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime     @updatedAt @db.Timestamptz(6)
+  deletedAt          DateTime?    @db.Timestamptz(6)
+
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, issuedAt(sort: Desc)])
+  @@index([invoiceId])
+  @@map("credit_notes")
+}
+
+// =============================================================================
+// 5. SOFTWARE RELEASES, ARTIFACTS & UPDATE CHANNELS MODELS
+// =============================================================================
+
+model UpdateChannel {
+  id          String            @id @default(uuid()) @db.Uuid
+  name        UpdateChannelName @unique
+  description String            @db.Text
+  isDefault   Boolean           @default(false)
+  createdAt   DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime          @updatedAt @db.Timestamptz(6)
+  deletedAt   DateTime?         @db.Timestamptz(6)
+
+  releases SoftwareRelease[]
+  servers  Server[]
+
+  @@map("update_channels")
+}
+
+model SoftwareRelease {
+  id                       String            @id @default(uuid()) @db.Uuid
+  version                  String            @db.VarChar(64)
+  channelId                String            @db.Uuid
+  component                SoftwareComponent
+  minOsVersion             String            @db.VarChar(64)
+  ed25519ManifestSignature String            @db.Text
+  ed25519SigningKeyId      String            @db.VarChar(64)
+  releaseNotes             String            @db.Text
+  isCriticalSecurity       Boolean           @default(false)
+  publishedAt              DateTime          @db.Timestamptz(6)
+  createdAt                DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime          @updatedAt @db.Timestamptz(6)
+  deletedAt                DateTime?         @db.Timestamptz(6)
+
+  channel       UpdateChannel         @relation(fields: [channelId], references: [id], onDelete: Restrict)
+  artifacts     ReleaseArtifact[]
+  updateHistory ServerUpdateHistory[]
+
+  @@unique([component, version])
+  @@index([channelId, component, publishedAt(sort: Desc)])
+  @@map("software_releases")
+}
+
+model ReleaseArtifact {
+  id               String    @id @default(uuid()) @db.Uuid
+  releaseId        String    @db.Uuid
+  osTarget         OsFamily
+  arch             CpuArch   @default(X86_64)
+  downloadUrl      String    @db.VarChar(1024)
+  sha256Checksum   String    @db.VarChar(64)
+  ed25519Signature String    @db.Text
+  sizeBytes        BigInt
+  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt        DateTime? @db.Timestamptz(6)
+
+  release SoftwareRelease @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+
+  @@unique([releaseId, osTarget, arch])
+  @@index([sha256Checksum])
+  @@map("release_artifacts")
+}
+
+model ServerUpdateHistory {
+  id               String                @id @default(uuid()) @db.Uuid
+  organizationId   String                @db.Uuid
+  serverId         String                @db.Uuid
+  releaseId        String                @db.Uuid
+  fromVersion      String                @db.VarChar(64)
+  toVersion        String                @db.VarChar(64)
+  status           UpdateExecutionStatus @default(PREFLIGHT)
+  rollbackExecuted Boolean               @default(false)
+  errorLogSummary  String?               @db.Text
+  startedAt        DateTime              @default(now()) @db.Timestamptz(6)
+  completedAt      DateTime?             @db.Timestamptz(6)
+  createdAt        DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime              @updatedAt @db.Timestamptz(6)
+  deletedAt        DateTime?             @db.Timestamptz(6)
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  server       Server          @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  release      SoftwareRelease @relation(fields: [releaseId], references: [id], onDelete: Restrict)
+
+  @@index([serverId, startedAt(sort: Desc)])
+  @@index([organizationId, status])
+  @@map("server_update_history")
+}
+
+// =============================================================================
+// 6. SUPPORT, SECURITY TELEMETRY & AUDIT LOG MODELS
+// =============================================================================
+
+model SupportTicket {
+  id                   String         @id @default(uuid()) @db.Uuid
+  ticketNumber         String         @unique @db.VarChar(32)
+  organizationId       String         @db.Uuid
+  serverId             String?        @db.Uuid
+  createdByUserId      String         @db.Uuid
+  subject              String         @db.VarChar(255)
+  description          String         @db.Text
+  priority             TicketPriority @default(NORMAL)
+  status               TicketStatus   @default(OPEN)
+  diagnosticsBundleRef String?        @db.VarChar(512)
+  resolvedAt           DateTime?      @db.Timestamptz(6)
+  createdAt            DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime       @updatedAt @db.Timestamptz(6)
+  deletedAt            DateTime?      @db.Timestamptz(6)
+
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  server        Server?      @relation(fields: [serverId], references: [id], onDelete: SetNull)
+  createdByUser User         @relation("TicketCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, status, priority])
+  @@index([serverId, status])
+  @@map("support_tickets")
+}
+
+model SecurityEvent {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String?          @db.Uuid
+  serverId       String?          @db.Uuid
+  actorUserId    String?          @db.Uuid
+  severity       SecuritySeverity
+  eventType      String           @db.VarChar(120)
+  ipAddress      String           @db.VarChar(64)
+  detailsJson    Json             @db.JsonB
+  mitigated      Boolean          @default(false)
+  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime         @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime?        @db.Timestamptz(6)
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  server       Server?       @relation(fields: [serverId], references: [id], onDelete: SetNull)
+  actorUser    User?         @relation("SecurityEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, severity, createdAt(sort: Desc)])
+  @@index([serverId, createdAt(sort: Desc)])
+  @@index([eventType, createdAt(sort: Desc)])
+  @@map("security_events")
+}
+
+model AuditLog {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String?   @db.Uuid
+  actorUserId    String?   @db.Uuid
+  actorRole      String    @db.VarChar(100)
+  action         String    @db.VarChar(150)
+  resourceType   String    @db.VarChar(100)
+  resourceId     String    @db.VarChar(128)
+  ipAddress      String    @db.VarChar(64)
+  userAgent      String?   @db.VarChar(512)
+  requestId      String    @db.VarChar(128)
+  changesJson    Json      @db.JsonB
+  integrityHash  String    @db.VarChar(128)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime? @db.Timestamptz(6)
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  actorUser    User?         @relation("AuditLogActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([actorUserId, createdAt(sort: Desc)])
+  @@index([resourceType, resourceId])
+  @@index([requestId])
+  @@map("audit_logs")
+}

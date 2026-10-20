@@ -1,0 +1,387 @@
+openapi: 3.1.0
+info:
+  title: Garvix Hosting Manager API Contract (Local Panel & Cloud Control Plane)
+  version: 1.0.0-phase0
+  description: >
+    Versioned OpenAPI 3.1 contract for Garvix Hosting Manager by Garvix Software Solutions Pvt Ltd.
+    Includes Local Customer Hosting Panel endpoints (/api/v1/*) and Garvix Cloud Control Plane
+    licensing & release distribution endpoints (/cloud/api/v1/*).
+  contact:
+    name: Garvix Software Solutions Pvt Ltd
+servers:
+  - url: https://panel.customer-domain.example/api/v1
+    description: Customer Local Hosting Panel API
+  - url: https://cloud.garvix.io/cloud/api/v1
+    description: Garvix Cloud Control Plane API
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    agentMtls:
+      type: mutualTLS
+  parameters:
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+        format: uuid
+    StepUpMfaTokenHeader:
+      name: X-Garvix-StepUp-Mfa
+      in: header
+      required: false
+      schema:
+        type: string
+  schemas:
+    ApiErrorResponse:
+      type: object
+      required: [success, error, requestId, timestamp]
+      properties:
+        success:
+          type: boolean
+          const: false
+        requestId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+    AsyncJobAcceptedResponse:
+      type: object
+      required: [success, jobId, status, pollUrl, isDryRun]
+      properties:
+        success:
+          type: boolean
+          const: true
+        jobId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [QUEUED, RUNNING, DRY_RUN_READY]
+        pollUrl:
+          type: string
+        isDryRun:
+          type: boolean
+paths:
+  /api/v1/auth/login:
+    post:
+      summary: Authenticate panel user and issue short-lived session or MFA challenge
+      tags: [Authentication]
+      responses:
+        '200':
+          description: Authenticated or MFA step required
+        '401':
+          description: Invalid credentials
+  /api/v1/auth/logout:
+    post:
+      summary: Revoke active session token
+      tags: [Authentication]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204':
+          description: Session terminated
+  /api/v1/auth/refresh:
+    post:
+      summary: Rotate refresh token and issue new access token
+      tags: [Authentication]
+      responses:
+        '200':
+          description: Token rotated
+  /api/v1/auth/mfa/verify:
+    post:
+      summary: Verify TOTP or WebAuthn assertion for login or step-up authorization
+      tags: [Authentication]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: MFA step-up verified
+  /api/v1/auth/session:
+    get:
+      summary: Retrieve current principal, role, tenant scope, and active MFA status
+      tags: [Authentication]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Active session context
+  /api/v1/servers:
+    get:
+      summary: List enrolled servers in tenant scope
+      tags: [Servers]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Server inventory list
+    post:
+      summary: Enroll a new VPS with preflight verification
+      tags: [Servers]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201':
+          description: Enrollment token and preflight instructions generated
+  /api/v1/servers/{id}:
+    get:
+      summary: Get server details and realistic capacity profile
+      tags: [Servers]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Server profile
+  /api/v1/servers/{id}/health:
+    get:
+      summary: Get managed service health status
+      tags: [Servers]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Service health matrix
+  /api/v1/servers/{id}/metrics:
+    get:
+      summary: Get historical and current telemetry (explicitly labeled if mock data)
+      tags: [Servers]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Server metrics
+  /api/v1/hosting-accounts:
+    get:
+      summary: List hosting accounts within caller's organization/reseller scope
+      tags: [Hosting Accounts]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Paginated hosting accounts
+    post:
+      summary: Provision isolated hosting account via state machine
+      tags: [Hosting Accounts]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '202':
+          description: Asynchronous provisioning job queued
+  /api/v1/hosting-accounts/{id}:
+    get:
+      summary: Get hosting account details and resource usage
+      tags: [Hosting Accounts]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Hosting account details
+    patch:
+      summary: Update hosting account package or resource limits
+      tags: [Hosting Accounts]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '202':
+          description: Quota update job queued
+  /api/v1/hosting-accounts/{id}/suspend:
+    post:
+      summary: Suspend hosting account web/app/mail access while preserving data
+      tags: [Hosting Accounts]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '202':
+          description: Suspension job queued
+  /api/v1/domains:
+    get:
+      summary: List domains in authorized account scope
+      tags: [Domains]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Domain inventory
+    post:
+      summary: Add domain, subdomain, or addon domain
+      tags: [Domains]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '202':
+          description: Domain provisioning job queued
+  /api/v1/domains/{id}:
+    get:
+      summary: Get domain configuration and SSL status
+      tags: [Domains]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Domain details
+  /api/v1/domains/{id}/dns:
+    get:
+      summary: Get DNS zone records and propagation status
+      tags: [Domains]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: DNS zone and records
+    put:
+      summary: Validate and apply DNS zone changes with rollback snapshot
+      tags: [Domains]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '202':
+          description: DNS sync job queued
+  /api/v1/email/domains:
+    get:
+      summary: List email domains with SPF, DKIM, DMARC, and preflight status
+      tags: [Email]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Email domain list
+  /api/v1/email/mailboxes:
+    get:
+      summary: List mailboxes in authorized scope
+      tags: [Email]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Mailbox list
+    post:
+      summary: Create mailbox with Argon2id hash and Dovecot quota
+      tags: [Email]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '202':
+          description: Mailbox provisioning job queued
+  /api/v1/email/mailboxes/{id}:
+    patch:
+      summary: Update mailbox quota, spam threshold, or suspension state
+      tags: [Email]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '202':
+          description: Mailbox update job queued
+  /api/v1/email/mailboxes/{id}/reset-password:
+    post:
+      summary: Rotate mailbox password
+      tags: [Email]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '202':
+          description: Password rotation job queued
+  /api/v1/databases:
+    get:
+      summary: List customer PostgreSQL and MariaDB databases
+      tags: [Databases]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Database list
+    post:
+      summary: Provision new PostgreSQL or MariaDB database with least-privilege role
+      tags: [Databases]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '202':
+          description: Database creation job queued
+  /api/v1/databases/{id}/users:
+    post:
+      summary: Create database user and assign grants
+      tags: [Databases]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '202':
+          description: Database user job queued
+  /api/v1/databases/{id}/backups:
+    post:
+      summary: Trigger logical backup (pg_dump / mariadb-dump) into Restic repository
+      tags: [Databases]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '202':
+          description: Database backup job queued
+  /api/v1/ssl/certificates:
+    get:
+      summary: List SSL certificates and renewal status
+      tags: [SSL]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Certificate inventory
+    post:
+      summary: Issue ACME certificate (HTTP-01 / DNS-01) or upload custom certificate
+      tags: [SSL]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '202':
+          description: Certificate issuance job queued
+  /api/v1/ssl/certificates/{id}/renew:
+    post:
+      summary: Trigger certificate renewal with rate-limit check
+      tags: [SSL]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '202':
+          description: Renewal job queued
+  /api/v1/jobs:
+    get:
+      summary: List asynchronous infrastructure jobs
+      tags: [Jobs]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Job list
+  /api/v1/jobs/{id}:
+    get:
+      summary: Inspect job status, planned steps, snapshot ID, and rollback state
+      tags: [Jobs]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Job details
+  /api/v1/jobs/{id}/cancel:
+    post:
+      summary: Request safe cancellation or rollback of queued/running job
+      tags: [Jobs]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Cancellation requested
+  /cloud/api/v1/licenses/activate:
+    post:
+      summary: Enroll server hardware fingerprint and issue Ed25519-signed license envelope
+      tags: [Commercial Licensing]
+      responses:
+        '200':
+          description: Signed license envelope issued
+  /cloud/api/v1/licenses/validate:
+    post:
+      summary: Validate active server license and refresh offline grace lease
+      tags: [Commercial Licensing]
+      responses:
+        '200':
+          description: Refreshed signed license envelope
+  /cloud/api/v1/licenses/deactivate:
+    post:
+      summary: Deactivate server binding to permit safe VPS migration/transfer
+      tags: [Commercial Licensing]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: License binding released for transfer
+  /cloud/api/v1/licenses/{id}/entitlements:
+    get:
+      summary: Retrieve plan limits and feature entitlements
+      tags: [Commercial Licensing]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: License entitlements
+  /cloud/api/v1/releases/latest:
+    get:
+      summary: Fetch latest Ed25519-signed software release manifest for channel and OS
+      tags: [Commercial Licensing]
+      responses:
+        '200':
+          description: Signed release manifest

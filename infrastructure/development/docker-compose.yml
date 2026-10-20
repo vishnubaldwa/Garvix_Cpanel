@@ -1,0 +1,74 @@
+name: garvix-local-dev
+
+services:
+  # Plane A: Garvix Cloud Control Plane Isolated PostgreSQL Database
+  postgres-cloud:
+    image: postgres:16-alpine
+    container_name: garvix-postgres-cloud
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: garvix_cloud_user
+      POSTGRES_PASSWORD: garvix_cloud_dev_password_only
+      POSTGRES_DB: garvix_cloud
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres_cloud_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U garvix_cloud_user -d garvix_cloud"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Plane B: Garvix Local Server Panel Isolated PostgreSQL Database
+  postgres-local:
+    image: postgres:16-alpine
+    container_name: garvix-postgres-local
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: garvix_local_user
+      POSTGRES_PASSWORD: garvix_local_dev_password_only
+      POSTGRES_DB: garvix_local
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - postgres_local_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U garvix_local_user -d garvix_local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Shared Local Development Redis for BullMQ Provisioning Queues & Rate Limiting
+  redis:
+    image: redis:7.2-alpine
+    container_name: garvix-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Safe Local SMTP & Webmail Sink for Email Testing (No External Emails Sent)
+  mailpit:
+    image: axllent/mailpit:v1.20
+    container_name: garvix-mailpit
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1025:1025" # Local SMTP listener
+      - "127.0.0.1:8025:8025" # Local Web UI for inspecting captured emails
+    environment:
+      MP_MAX_MESSAGES: 1000
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+
+volumes:
+  postgres_cloud_data:
+  postgres_local_data:
+  redis_data:

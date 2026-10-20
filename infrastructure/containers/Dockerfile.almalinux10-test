@@ -1,0 +1,55 @@
+# Disposable AlmaLinux 10 Container for Safe Phase 2+ Privileged Agent Testing
+# NEVER connect this container to external production servers or live customer data.
+
+FROM almalinux:10
+
+LABEL org.opencontainers.image.title="Garvix Hosting Manager — Disposable AlmaLinux 10 Test Target" \
+      org.opencontainers.image.vendor="Garvix Software Solutions Pvt Ltd" \
+      org.opencontainers.image.description="Isolated AlmaLinux 10 systemd/cgroupv2 test harness for garvix-agentd"
+
+ENV container=docker
+
+# Install base systemd, quota tools, ACLs, Restic, Nginx, Postfix, Dovecot, and OpenSSL for integration tests
+RUN dnf -y update && \
+    dnf -y install \
+      systemd \
+      systemd-libs \
+      iproute \
+      procps-ng \
+      shadow-utils \
+      quota \
+      xfsprogs \
+      acl \
+      openssl \
+      ca-certificates \
+      nginx \
+      postfix \
+      dovecot \
+      jq \
+      tar \
+      zstd && \
+    dnf clean all && \
+    rm -rf /var/cache/dnf
+
+# Create unprivileged garvix-panel system account (UID/GID 988) and garvix-web group
+RUN groupadd -g 988 garvix-panel && \
+    useradd -r -u 988 -g garvix-panel -d /var/lib/garvix -s /sbin/nologin -c "Garvix Local Hosting Panel" garvix-panel && \
+    groupadd -r garvix-web
+
+# Create isolated Garvix runtime, state, PKI, and transaction snapshot directories
+RUN mkdir -p \
+      /run/garvix \
+      /etc/garvix/pki \
+      /var/lib/garvix/tx \
+      /var/lib/garvix/backups \
+      /var/cache/garvix-backups \
+      /var/log/garvix && \
+    chown root:garvix-panel /run/garvix /etc/garvix /etc/garvix/pki && \
+    chmod 0750 /run/garvix /etc/garvix /etc/garvix/pki && \
+    chown -R garvix-panel:garvix-panel /var/lib/garvix /var/log/garvix && \
+    chmod 0700 /var/lib/garvix/tx /var/cache/garvix-backups
+
+VOLUME ["/sys/fs/cgroup", "/tmp", "/run"]
+
+STOPSIGNAL SIGRTMIN+3
+CMD ["/usr/sbin/init"]

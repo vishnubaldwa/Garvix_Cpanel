@@ -1,0 +1,31 @@
+{
+  "name": "garvix-hosting-manager",
+  "version": "0.1.0-phase0",
+  "private": true,
+  "description": "Garvix Hosting Manager — Commercial Hybrid Self-Hosted + Cloud-Managed Linux Hosting Control Panel by Garvix Software Solutions Pvt Ltd",
+  "author": "Garvix Software Solutions Pvt Ltd",
+  "license": "UNLICENSED",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "start": "tsx apps/local-panel-api/src/cli.ts",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run build --workspaces --if-present",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:security": "vitest run tests/security",
+    "test:recovery": "vitest run tests/recovery",
+    "test:watch": "vitest",
+    "preflight:almalinux": "bash installers/almalinux/preflight-check.sh --json"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "concurrently": "^9.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "zod": "^3.24.1"
+  }
+}

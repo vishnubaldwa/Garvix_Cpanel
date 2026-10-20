@@ -1,0 +1,54 @@
+name: Garvix Hosting Manager CI
+
+on:
+  push:
+    branches: ["main", "develop"]
+  pull_request:
+    branches: ["main", "develop"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-test:
+    name: Typecheck, Prisma Schema Validation, Unit & Security Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Setup Go 1.22 (Privileged Linux Agent Check)
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Validate Cloud Control Plane Prisma Schema
+        env:
+          CLOUD_DATABASE_URL: "postgresql://garvix_cloud_user:test@127.0.0.1:5433/garvix_cloud"
+        run: npx prisma validate --schema=prisma/cloud/schema.prisma
+
+      - name: Validate Local Panel Prisma Schema
+        env:
+          LOCAL_PANEL_DATABASE_URL: "postgresql://garvix_local_user:test@127.0.0.1:5434/garvix_local"
+        run: npx prisma validate --schema=prisma/local-panel/schema.prisma
+
+      - name: Run Strict TypeScript Typecheck Across All Workspaces
+        run: npm run typecheck
+
+      - name: Run Unit, Contract & Security Test Suite
+        run: npm test
+
+      - name: Vet Privileged Go Linux Agent
+        working-directory: apps/linux-agent
+        run: go vet ./...

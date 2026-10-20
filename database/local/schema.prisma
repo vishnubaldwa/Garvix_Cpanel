@@ -1,0 +1,1387 @@
+// =============================================================================
+// Garvix Hosting Manager — Customer Local Hosting Panel Prisma Schema
+// Garvix Software Solutions Pvt Ltd
+// Database: PostgreSQL 16+ (DATABASE_LOCAL_URL)
+// Strict Physical & Logical Isolation from Cloud Control Plane & Customer Workloads
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/local-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_LOCAL_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum LocalUserStatus {
+  ACTIVE
+  SUSPENDED
+  LOCKED
+  DISABLED
+}
+
+enum HostingAccountStatus {
+  PREFLIGHT
+  PROVISIONING_LINUX_USER
+  PROVISIONING_HOME_FS
+  PROVISIONING_WEB_VHOST
+  PROVISIONING_DNS
+  ACTIVE
+  SUSPENDING
+  SUSPENDED
+  TERMINATING
+  TERMINATED
+  FAILED_ROLLED_BACK
+}
+
+enum DomainType {
+  PRIMARY
+  ADDON
+  SUBDOMAIN
+  PARKED
+}
+
+enum DomainStatus {
+  PENDING_DNS
+  ACTIVE
+  SUSPENDED
+  DELETING
+}
+
+enum WebServerEngine {
+  NGINX
+  OPENLITESPEED
+  APACHE_BEHIND_NGINX
+}
+
+enum PhpRuntimeVersion {
+  PHP_8_1
+  PHP_8_2
+  PHP_8_3
+  PHP_8_4
+  NONE
+}
+
+enum DnsRecordType {
+  A
+  AAAA
+  CNAME
+  MX
+  TXT
+  SRV
+  NS
+  CAA
+  PTR
+}
+
+enum SslCertificateProvider {
+  LETS_ENCRYPT
+  ZEROSSL
+  CUSTOM_UPLOAD
+  SELF_SIGNED_FALLBACK
+}
+
+enum SslChallengeType {
+  HTTP_01
+  DNS_01
+}
+
+enum SslCertificateStatus {
+  PENDING_ISSUANCE
+  ACTIVE
+  RENEWING
+  EXPIRED
+  REVOKED
+  FAILED
+}
+
+enum RenewalJobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum DmarcPolicyMode {
+  NONE
+  QUARANTINE
+  REJECT
+}
+
+enum DatabaseEngine {
+  POSTGRESQL
+  MARIADB
+}
+
+enum DatabasePrivilegeLevel {
+  ALL_PRIVILEGES
+  READ_WRITE
+  READ_ONLY
+}
+
+enum ApplicationRuntime {
+  PHP_FPM
+  NODEJS
+  PYTHON_WSGI_ASGI
+  STATIC_HTML
+  DOCKER_COMPOSE
+  REVERSE_PROXY
+}
+
+enum DeploymentStatus {
+  QUEUED
+  BUILDING
+  DEPLOYING
+  ACTIVE
+  ROLLED_BACK
+  FAILED
+}
+
+enum ProcessState {
+  RUNNING
+  STOPPED
+  STARTING
+  BACKOFF
+  FATAL
+}
+
+enum FileOperationType {
+  UPLOAD
+  DOWNLOAD
+  EXTRACT_ARCHIVE
+  COMPRESS_ARCHIVE
+  CHMOD
+  CHOWN_FIX
+  DELETE
+  MOVE
+  COPY
+  EDIT
+}
+
+enum BackupStorageBackend {
+  LOCAL_PATH
+  S3_COMPATIBLE
+  SFTP_REMOTE
+  BACKBLAZE_B2
+}
+
+enum BackupJobStatus {
+  QUEUED
+  SNAPSHOTTING_DB
+  ARCHIVING_FILES
+  ENCRYPTING_UPLOADING
+  VERIFYING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum RestoreScope {
+  FULL_ACCOUNT
+  FILES_ONLY
+  DATABASE_ONLY
+  MAILBOXES_ONLY
+}
+
+enum AgentJobStatus {
+  QUEUED
+  PREFLIGHT
+  RUNNING
+  SUCCEEDED
+  FAILED
+  ROLLING_BACK
+  ROLLED_BACK
+}
+
+enum RollbackStatus {
+  NOT_REQUIRED
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+enum SystemServiceName {
+  GARVIX_AGENT
+  GARVIX_PANEL
+  NGINX
+  PHP_FPM_82
+  PHP_FPM_83
+  POSTFIX
+  DOVECOT
+  RSPAMD
+  PDNS_SERVER
+  POSTGRESQL_WORKLOAD
+  MARIADB_WORKLOAD
+  REDIS
+  CROWDSEC
+}
+
+enum ServiceHealthState {
+  HEALTHY
+  DEGRADED
+  DOWN
+  RESTARTING
+  MAINTENANCE
+}
+
+enum SecurityEventSeverity {
+  INFO
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// =============================================================================
+// 1. LOCAL IAM, SESSIONS & TENANT ISOLATION MODELS
+// =============================================================================
+
+model LocalRole {
+  id              String    @id @default(uuid()) @db.Uuid
+  code            String    @unique @db.VarChar(80)
+  name            String    @db.VarChar(120)
+  description     String    @db.Text
+  permissionsJson Json      @db.JsonB
+  isSystemRole    Boolean   @default(true)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt       DateTime? @db.Timestamptz(6)
+
+  users LocalUser[]
+
+  @@index([isSystemRole, deletedAt])
+  @@map("local_roles")
+}
+
+model LocalUser {
+  id                        String          @id @default(uuid()) @db.Uuid
+  roleId                    String          @db.Uuid
+  resellerId                String?         @db.Uuid
+  username                  String          @unique @db.VarChar(64)
+  email                     String          @unique @db.VarChar(320)
+  fullName                  String          @db.VarChar(255)
+  passwordArgon2Hash        String          @db.Text
+  mfaEnabled                Boolean         @default(true)
+  // Envelope-encrypted TOTP secret (AES-256-GCM)
+  totpEncryptedCiphertext   String?         @db.Text
+  totpKeyId                 String?         @db.VarChar(128)
+  totpIv                    String?         @db.VarChar(64)
+  totpAuthTag               String?         @db.VarChar(64)
+  recoveryCodeHashesJson    Json?           @db.JsonB
+  status                    LocalUserStatus @default(ACTIVE)
+  failedLoginAttempts       Int             @default(0)
+  lockedUntil               DateTime?       @db.Timestamptz(6)
+  lastLoginAt               DateTime?       @db.Timestamptz(6)
+  lastLoginIp               String?         @db.VarChar(64)
+  createdAt                 DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt                 DateTime        @updatedAt @db.Timestamptz(6)
+  deletedAt                 DateTime?       @db.Timestamptz(6)
+
+  role            LocalRole            @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  resellerParent  LocalUser?           @relation("ResellerSubUsers", fields: [resellerId], references: [id], onDelete: SetNull)
+  subUsers        LocalUser[]          @relation("ResellerSubUsers")
+  sessions        LocalSession[]
+  ownedPackages   HostingPackage[]     @relation("ResellerOwnedPackages")
+  ownedAccounts   HostingAccount[]     @relation("AccountOwner")
+  resoldAccounts  HostingAccount[]     @relation("AccountReseller")
+  fileOperations  FileOperation[]
+  securityEvents  LocalSecurityEvent[]
+  auditLogs       LocalAuditLog[]
+
+  @@index([resellerId, status, deletedAt])
+  @@index([roleId, status])
+  @@map("local_users")
+}
+
+model LocalSession {
+  id                  String    @id @default(uuid()) @db.Uuid
+  userId              String    @db.Uuid
+  accountId           String?   @db.Uuid
+  resellerId          String?   @db.Uuid
+  sessionTokenHash    String    @unique @db.VarChar(128)
+  csrfTokenHash       String    @db.VarChar(128)
+  ipAddress           String    @db.VarChar(64)
+  userAgent           String    @db.VarChar(512)
+  impersonatedByUserId String?  @db.Uuid
+  expiresAt           DateTime  @db.Timestamptz(6)
+  revokedAt           DateTime? @db.Timestamptz(6)
+  lastActiveAt        DateTime  @default(now()) @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt           DateTime? @db.Timestamptz(6)
+
+  user LocalUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt, revokedAt])
+  @@index([accountId, resellerId])
+  @@map("local_sessions")
+}
+
+// =============================================================================
+// 2. HOSTING PACKAGES, ACCOUNTS & CGROUP RESOURCE ALLOCATIONS
+// =============================================================================
+
+model HostingPackage {
+  id             String    @id @default(uuid()) @db.Uuid
+  resellerId     String?   @db.Uuid
+  code           String    @unique @db.VarChar(64)
+  name           String    @db.VarChar(150)
+  description    String?   @db.Text
+  isResellerPlan Boolean   @default(false)
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime? @db.Timestamptz(6)
+
+  reseller LocalUser?       @relation("ResellerOwnedPackages", fields: [resellerId], references: [id], onDelete: SetNull)
+  limits   PackageLimit?
+  accounts HostingAccount[]
+
+  @@index([resellerId, isActive, deletedAt])
+  @@map("hosting_packages")
+}
+
+model PackageLimit {
+  id                      String    @id @default(uuid()) @db.Uuid
+  packageId               String    @unique @db.Uuid
+  resellerId              String?   @db.Uuid
+  diskQuotaMb             Int       @default(10240)
+  inodeSoftLimit          Int       @default(250000)
+  inodeHardLimit          Int       @default(300000)
+  bandwidthMonthlyMb      Int       @default(102400)
+  cpuQuotaPercent         Int       @default(100)
+  memoryMaxMb             Int       @default(1024)
+  ioReadBps               BigInt    @default(52428800)
+  ioWriteBps              BigInt    @default(52428800)
+  pidsMax                 Int       @default(120)
+  maxAddonDomains         Int       @default(10)
+  maxSubdomains           Int       @default(50)
+  maxDomainAliases        Int       @default(20)
+  maxEmailDomains         Int       @default(10)
+  maxMailboxes            Int       @default(50)
+  mailboxMaxQuotaMb       Int       @default(5120)
+  hourlyOutboundMailLimit Int       @default(250)
+  maxDatabases            Int       @default(10)
+  maxApplications         Int       @default(5)
+  sshAccessAllowed        Boolean   @default(false)
+  dedicatedIpAllowed      Boolean   @default(false)
+  createdAt               DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt               DateTime? @db.Timestamptz(6)
+
+  package HostingPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([resellerId])
+  @@map("package_limits")
+}
+
+model HostingAccount {
+  id                  String               @id @default(uuid()) @db.Uuid
+  ownerUserId         String               @db.Uuid
+  resellerId          String?              @db.Uuid
+  packageId           String               @db.Uuid
+  linuxUsername       String               @unique @db.VarChar(32)
+  linuxUid            Int                  @unique
+  linuxGid            Int
+  homeDirectory       String               @unique @db.VarChar(255)
+  primaryDomainName   String               @unique @db.VarChar(255)
+  status              HostingAccountStatus @default(PREFLIGHT)
+  dedicatedIpv4       String?              @db.VarChar(64)
+  sshShell            String               @default("/usr/sbin/nologin") @db.VarChar(64)
+  cgroupSliceName     String               @unique @db.VarChar(128)
+  suspensionReason    String?              @db.VarChar(500)
+  suspendedAt         DateTime?            @db.Timestamptz(6)
+  terminatedAt        DateTime?            @db.Timestamptz(6)
+  createdAt           DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime             @updatedAt @db.Timestamptz(6)
+  deletedAt           DateTime?            @db.Timestamptz(6)
+
+  owner               LocalUser            @relation("AccountOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  reseller            LocalUser?           @relation("AccountReseller", fields: [resellerId], references: [id], onDelete: SetNull)
+  package             HostingPackage       @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  allocation          AccountAllocation?
+  domains             Domain[]
+  domainAliases       DomainAlias[]
+  dnsZones            DnsZone[]
+  dnsRecords          DnsRecord[]
+  sslCertificates     SslCertificate[]
+  renewalJobs         CertificateRenewalJob[]
+  emailDomains        EmailDomain[]
+  emailMailboxes      EmailMailbox[]
+  emailAliases        EmailAlias[]
+  emailForwarders     EmailForwarder[]
+  emailAutoresponders EmailAutoresponder[]
+  mailDomainPolicies  MailDomainPolicy[]
+  mailUsages          MailUsage[]
+  hostedDatabases     HostedDatabase[]
+  databaseAccounts    DatabaseAccount[]
+  databaseGrants      DatabaseGrant[]
+  applications        Application[]
+  appDeployments      ApplicationDeployment[]
+  appSecrets          ApplicationEnvironmentSecret[]
+  appProcesses        ApplicationProcess[]
+  fileOperations      FileOperation[]
+  scheduledTasks      ScheduledTask[]
+  backupPolicies      BackupPolicy[]
+  backupJobs          BackupJob[]
+  backupArtifacts     BackupArtifact[]
+  restoreJobs         RestoreJob[]
+  agentJobs           AgentJob[]
+  monitoringSamples   MonitoringSample[]
+  securityEvents      LocalSecurityEvent[]
+  auditLogs           LocalAuditLog[]
+
+  @@index([resellerId, status, deletedAt])
+  @@index([ownerUserId, status])
+  @@index([status, createdAt])
+  @@map("hosting_accounts")
+}
+
+model AccountAllocation {
+  id                  String    @id @default(uuid()) @db.Uuid
+  accountId           String    @unique @db.Uuid
+  resellerId          String?   @db.Uuid
+  diskQuotaMb         Int
+  diskUsedMb          Int       @default(0)
+  inodeSoftLimit      Int
+  inodeHardLimit      Int
+  inodesUsed          Int       @default(0)
+  bandwidthMonthlyMb  Int
+  bandwidthUsedMb     Int       @default(0)
+  cpuQuotaPercent     Int
+  memoryMaxMb         Int
+  ioReadBps           BigInt
+  ioWriteBps          BigInt
+  pidsMax             Int
+  lastQuotaSyncedAt   DateTime? @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt           DateTime? @db.Timestamptz(6)
+
+  account HostingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([resellerId])
+  @@map("account_allocations")
+}
+
+// =============================================================================
+// 3. DOMAINS, WEB VHOSTS, DNS ZONES & ACME SSL CERTIFICATES
+// =============================================================================
+
+model Domain {
+  id                 String            @id @default(uuid()) @db.Uuid
+  accountId          String            @db.Uuid
+  resellerId         String?           @db.Uuid
+  domainName         String            @unique @db.VarChar(255)
+  type               DomainType        @default(PRIMARY)
+  status             DomainStatus      @default(ACTIVE)
+  documentRoot       String            @db.VarChar(512)
+  webServerEngine    WebServerEngine   @default(NGINX)
+  phpVersion         PhpRuntimeVersion @default(PHP_8_3)
+  forceHttps         Boolean           @default(true)
+  hstsEnabled        Boolean           @default(true)
+  http3Enabled       Boolean           @default(true)
+  openBasedirEnabled Boolean           @default(true)
+  vhostConfigHash    String?           @db.VarChar(64)
+  createdAt          DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime          @updatedAt @db.Timestamptz(6)
+  deletedAt          DateTime?         @db.Timestamptz(6)
+
+  account         HostingAccount          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  aliases         DomainAlias[]
+  dnsZone         DnsZone?
+  sslCertificates SslCertificate[]
+  renewalJobs     CertificateRenewalJob[]
+  emailDomain     EmailDomain?
+  applications    Application[]
+
+  @@index([accountId, status, deletedAt])
+  @@index([resellerId, status])
+  @@map("domains")
+}
+
+model DomainAlias {
+  id              String    @id @default(uuid()) @db.Uuid
+  accountId       String    @db.Uuid
+  resellerId      String?   @db.Uuid
+  domainId        String    @db.Uuid
+  aliasDomainName String    @unique @db.VarChar(255)
+  redirectHttp301 Boolean   @default(true)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt       DateTime? @db.Timestamptz(6)
+
+  account HostingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  domain  Domain         @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, domainId])
+  @@index([resellerId])
+  @@map("domain_aliases")
+}
+
+model DnsZone {
+  id                  String    @id @default(uuid()) @db.Uuid
+  accountId           String    @db.Uuid
+  resellerId          String?   @db.Uuid
+  domainId            String    @unique @db.Uuid
+  zoneName            String    @unique @db.VarChar(255)
+  soaPrimaryNs        String    @db.VarChar(255)
+  soaHostmasterEmail  String    @db.VarChar(255)
+  soaSerial           BigInt    @default(2026101901)
+  soaRefreshSeconds   Int       @default(3600)
+  soaRetrySeconds     Int       @default(900)
+  soaExpireSeconds    Int       @default(1209600)
+  soaMinimumTtl       Int       @default(300)
+  dnssecEnabled       Boolean   @default(false)
+  dnssecKeyTag        Int?
+  dnssecDsRecord      String?   @db.Text
+  isActive            Boolean   @default(true)
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt           DateTime? @db.Timestamptz(6)
+
+  account HostingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  domain  Domain         @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  records DnsRecord[]
+
+  @@index([accountId, isActive, deletedAt])
+  @@index([resellerId])
+  @@map("dns_zones")
+}
+
+model DnsRecord {
+  id              String        @id @default(uuid()) @db.Uuid
+  accountId       String        @db.Uuid
+  resellerId      String?       @db.Uuid
+  zoneId          String        @db.Uuid
+  name            String        @db.VarChar(255)
+  type            DnsRecordType
+  content         String        @db.Text
+  ttl             Int           @default(3600)
+  priority        Int?
+  isSystemManaged Boolean       @default(false)
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime      @updatedAt @db.Timestamptz(6)
+  deletedAt       DateTime?     @db.Timestamptz(6)
+
+  account HostingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  zone    DnsZone        @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  @@index([zoneId, type, name])
+  @@index([accountId, isSystemManaged])
+  @@index([resellerId])
+  @@map("dns_records")
+}
+
+model SslCertificate {
+  id                             String                 @id @default(uuid()) @db.Uuid
+  accountId                      String                 @db.Uuid
+  resellerId                     String?                @db.Uuid
+  domainId                       String                 @db.Uuid
+  provider                       SslCertificateProvider @default(LETS_ENCRYPT)
+  challengeType                  SslChallengeType       @default(HTTP_01)
+  commonName                     String                 @db.VarChar(255)
+  sanDomainsJson                 Json                   @db.JsonB
+  serialNumberHex                String                 @db.VarChar(128)
+  sha256Fingerprint              String                 @unique @db.VarChar(128)
+  certificateChainPem            String                 @db.Text
+  // Envelope-encrypted TLS Private Key (AES-256-GCM)
+  encryptedPrivateKeyCiphertext  String                 @db.Text
+  privateKeyId                   String                 @db.VarChar(128)
+  privateKeyIv                   String                 @db.VarChar(64)
+  privateKeyAuthTag              String                 @db.VarChar(64)
+  status                         SslCertificateStatus   @default(ACTIVE)
+  autoRenew                      Boolean                @default(true)
+  issuedAt                       DateTime               @db.Timestamptz(6)
+  expiresAt                      DateTime               @db.Timestamptz(6)
+  lastRenewalAttemptAt           DateTime?              @db.Timestamptz(6)
+  createdAt                      DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt                      DateTime               @updatedAt @db.Timestamptz(6)
+  deletedAt                      DateTime?              @db.Timestamptz(6)
+
+  account     HostingAccount          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  domain      Domain                  @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  renewalJobs CertificateRenewalJob[]
+
+  @@index([accountId, domainId, status])
+  @@index([expiresAt, autoRenew, status])
+  @@index([resellerId])
+  @@map("ssl_certificates")
+}
+
+model CertificateRenewalJob {
+  id               String           @id @default(uuid()) @db.Uuid
+  accountId        String           @db.Uuid
+  resellerId       String?          @db.Uuid
+  domainId         String           @db.Uuid
+  sslCertificateId String?          @db.Uuid
+  challengeType    SslChallengeType @default(HTTP_01)
+  status           RenewalJobStatus @default(QUEUED)
+  attemptNumber    Int              @default(1)
+  acmeOrderUrl     String?          @db.VarChar(512)
+  errorDetail      String?          @db.Text
+  scheduledFor     DateTime         @db.Timestamptz(6)
+  startedAt        DateTime?        @db.Timestamptz(6)
+  completedAt      DateTime?        @db.Timestamptz(6)
+  createdAt        DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime         @updatedAt @db.Timestamptz(6)
+  deletedAt        DateTime?        @db.Timestamptz(6)
+
+  account        HostingAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  domain         Domain          @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  sslCertificate SslCertificate? @relation(fields: [sslCertificateId], references: [id], onDelete: SetNull)
+
+  @@index([status, scheduledFor])
+  @@index([accountId, domainId])
+  @@index([resellerId])
+  @@map("certificate_renewal_jobs")
+}
+
+// =============================================================================
+// 4. EMAIL DOMAINS, MAILBOXES, POLICIES & USAGE MODELS
+// =============================================================================
+
+model EmailDomain {
+  id                          String    @id @default(uuid()) @db.Uuid
+  accountId                   String    @db.Uuid
+  resellerId                  String?   @db.Uuid
+  domainId                    String    @unique @db.Uuid
+  domainName                  String    @unique @db.VarChar(255)
+  catchAllAddress             String?   @db.VarChar(320)
+  dkimSelector                String    @default("garvix") @db.VarChar(64)
+  dkimPublicKeyTxt            String    @db.Text
+  // Envelope-encrypted DKIM Private Key (AES-256-GCM)
+  dkimEncryptedKeyCiphertext  String    @db.Text
+  dkimKeyId                   String    @db.VarChar(128)
+  dkimIv                      String    @db.VarChar(64)
+  dkimAuthTag                 String    @db.VarChar(64)
+  webmailEnabled              Boolean   @default(true)
+  isActive                    Boolean   @default(true)
+  createdAt                   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt                   DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt                   DateTime? @db.Timestamptz(6)
+
+  account        HostingAccount       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  domain         Domain               @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  mailboxes      EmailMailbox[]
+  aliases        EmailAlias[]
+  forwarders     EmailForwarder[]
+  autoresponders EmailAutoresponder[]
+  policy         MailDomainPolicy?
+  usages         MailUsage[]
+
+  @@index([accountId, isActive, deletedAt])
+  @@index([resellerId])
+  @@map("email_domains")
+}
+
+model EmailMailbox {
+  id                      String    @id @default(uuid()) @db.Uuid
+  accountId               String    @db.Uuid
+  resellerId              String?   @db.Uuid
+  emailDomainId           String    @db.Uuid
+  localPart               String    @db.VarChar(128)
+  emailAddress            String    @unique @db.VarChar(320)
+  // Dovecot Argon2id / SHA512-CRYPT password hash (never plaintext)
+  passwordDovecotHash     String    @db.Text
+  quotaMb                 Int       @default(1024)
+  usedBytes               BigInt    @default(0)
+  maildirPath             String    @db.VarChar(512)
+  imapEnabled             Boolean   @default(true)
+  pop3Enabled             Boolean   @default(false)
+  smtpSubmissionEnabled   Boolean   @default(true)
+  outboundHourlyLimit     Int       @default(100)
+  isSuspended             Boolean   @default(false)
+  lastLoginAt             DateTime? @db.Timestamptz(6)
+  createdAt               DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt               DateTime? @db.Timestamptz(6)
+
+  account        HostingAccount       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  emailDomain    EmailDomain          @relation(fields: [emailDomainId], references: [id], onDelete: Cascade)
+  autoresponders EmailAutoresponder[]
+
+  @@unique([emailDomainId, localPart])
+  @@index([accountId, isSuspended, deletedAt])
+  @@index([resellerId])
+  @@map("email_mailboxes")
+}
+
+model EmailAlias {
+  id                 String    @id @default(uuid()) @db.Uuid
+  accountId          String    @db.Uuid
+  resellerId         String?   @db.Uuid
+  emailDomainId      String    @db.Uuid
+  sourceAddress      String    @unique @db.VarChar(320)
+  destinationAddress String    @db.VarChar(320)
+  isActive           Boolean   @default(true)
+  createdAt          DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt          DateTime? @db.Timestamptz(6)
+
+  account     HostingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  emailDomain EmailDomain    @relation(fields: [emailDomainId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, emailDomainId])
+  @@index([resellerId])
+  @@map("email_aliases")
+}
+
+model EmailForwarder {
+  id               String    @id @default(uuid()) @db.Uuid
+  accountId        String    @db.Uuid
+  resellerId       String?   @db.Uuid
+  emailDomainId    String    @db.Uuid
+  sourceAddress    String    @db.VarChar(320)
+  targetAddress    String    @db.VarChar(320)
+  keepLocalCopy    Boolean   @default(true)
+  srsRewriteActive Boolean   @default(true)
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt        DateTime? @db.Timestamptz(6)
+
+  account     HostingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  emailDomain EmailDomain    @relation(fields: [emailDomainId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceAddress, targetAddress])
+  @@index([accountId, emailDomainId])
+  @@index([resellerId])
+  @@map("email_forwarders")
+}
+
+model EmailAutoresponder {
+  id                   String    @id @default(uuid()) @db.Uuid
+  accountId            String    @db.Uuid
+  resellerId           String?   @db.Uuid
+  emailDomainId        String    @db.Uuid
+  mailboxId            String    @db.Uuid
+  subject              String    @db.VarChar(255)
+  bodyText             String    @db.Text
+  replyIntervalHours   Int       @default(24)
+  startsAt             DateTime  @db.Timestamptz(6)
+  endsAt               DateTime? @db.Timestamptz(6)
+  isActive             Boolean   @default(true)
+  createdAt            DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt            DateTime? @db.Timestamptz(6)
+
+  account     HostingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  emailDomain EmailDomain    @relation(fields: [emailDomainId], references: [id], onDelete: Cascade)
+  mailbox     EmailMailbox   @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, mailboxId, isActive])
+  @@index([resellerId])
+  @@map("email_autoresponders")
+}
+
+model MailDomainPolicy {
+  id                      String          @id @default(uuid()) @db.Uuid
+  accountId               String          @db.Uuid
+  resellerId              String?         @db.Uuid
+  emailDomainId           String          @unique @db.Uuid
+  spfRecordValue          String          @db.VarChar(512)
+  dkimSigningEnabled      Boolean         @default(true)
+  dmarcPolicy             DmarcPolicyMode @default(QUARANTINE)
+  dmarcRuaEmail           String?         @db.VarChar(320)
+  rspamdGreylistThreshold Decimal         @default(4.00) @db.Decimal(5, 2)
+  rspamdAddHeaderScore    Decimal         @default(6.00) @db.Decimal(5, 2)
+  rspamdRejectScore       Decimal         @default(15.00) @db.Decimal(5, 2)
+  virusScanEnabled        Boolean         @default(true)
+  hourlyOutboundLimit     Int             @default(250)
+  dailyOutboundLimit      Int             @default(2000)
+  createdAt               DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime        @updatedAt @db.Timestamptz(6)
+  deletedAt               DateTime?       @db.Timestamptz(6)
+
+  account     HostingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  emailDomain EmailDomain    @relation(fields: [emailDomainId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([resellerId])
+  @@map("mail_domain_policies")
+}
+
+model MailUsage {
+  id                  String    @id @default(uuid()) @db.Uuid
+  accountId           String    @db.Uuid
+  resellerId          String?   @db.Uuid
+  emailDomainId       String    @db.Uuid
+  windowDate          DateTime  @db.Date
+  hourlyOutboundCount Int       @default(0)
+  dailyOutboundCount  Int       @default(0)
+  inboundCount        Int       @default(0)
+  spamRejectedCount   Int       @default(0)
+  bouncedCount        Int       @default(0)
+  bounceRatePercent   Decimal   @default(0.00) @db.Decimal(5, 2)
+  storageUsedBytes    BigInt    @default(0)
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt           DateTime? @db.Timestamptz(6)
+
+  account     HostingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  emailDomain EmailDomain    @relation(fields: [emailDomainId], references: [id], onDelete: Cascade)
+
+  @@unique([emailDomainId, windowDate])
+  @@index([accountId, windowDate(sort: Desc)])
+  @@index([resellerId])
+  @@map("mail_usage")
+}
+
+// =============================================================================
+// 5. CUSTOMER HOSTED DATABASE WORKLOADS (ISOLATED FROM PANEL DB)
+// =============================================================================
+
+model DatabaseInstance {
+  id                              String         @id @default(uuid()) @db.Uuid
+  name                            String         @unique @db.VarChar(120)
+  engine                          DatabaseEngine
+  version                         String         @db.VarChar(32)
+  host                            String         @default("127.0.0.1") @db.VarChar(255)
+  port                            Int
+  socketPath                      String?        @db.VarChar(255)
+  // MUST ALWAYS BE FALSE for customer workload instances to enforce strict isolation
+  isPanelInstance                 Boolean        @default(false)
+  maxConnections                  Int            @default(200)
+  adminUsername                   String         @db.VarChar(64)
+  // Envelope-encrypted administrative credential reference (AES-256-GCM)
+  adminEncryptedSecretCiphertext  String         @db.Text
+  adminSecretKeyId                String         @db.VarChar(128)
+  adminSecretIv                   String         @db.VarChar(64)
+  adminSecretAuthTag              String         @db.VarChar(64)
+  isHealthy                       Boolean        @default(true)
+  createdAt                       DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt                       DateTime       @updatedAt @db.Timestamptz(6)
+  deletedAt                       DateTime?      @db.Timestamptz(6)
+
+  databases        HostedDatabase[]
+  databaseAccounts DatabaseAccount[]
+
+  @@unique([engine, host, port])
+  @@index([engine, isPanelInstance, isHealthy])
+  @@map("database_instances")
+}
+
+model HostedDatabase {
+  id                 String         @id @default(uuid()) @db.Uuid
+  accountId          String         @db.Uuid
+  resellerId         String?        @db.Uuid
+  databaseInstanceId String         @db.Uuid
+  engine             DatabaseEngine
+  databaseName       String         @db.VarChar(64)
+  characterSet       String         @default("utf8mb4") @db.VarChar(32)
+  collation          String         @default("utf8mb4_unicode_ci") @db.VarChar(64)
+  sizeBytes          BigInt         @default(0)
+  quotaMb            Int            @default(2048)
+  isReadOnlyLocked   Boolean        @default(false)
+  createdAt          DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime       @updatedAt @db.Timestamptz(6)
+  deletedAt          DateTime?      @db.Timestamptz(6)
+
+  account          HostingAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  databaseInstance DatabaseInstance @relation(fields: [databaseInstanceId], references: [id], onDelete: Restrict)
+  grants           DatabaseGrant[]
+
+  @@unique([databaseInstanceId, databaseName])
+  @@index([accountId, engine, deletedAt])
+  @@index([resellerId])
+  @@map("hosted_databases")
+}
+
+model DatabaseAccount {
+  id                 String         @id @default(uuid()) @db.Uuid
+  accountId          String         @db.Uuid
+  resellerId         String?        @db.Uuid
+  databaseInstanceId String         @db.Uuid
+  engine             DatabaseEngine
+  dbUsername         String         @db.VarChar(64)
+  allowedHostPattern String         @default("127.0.0.1") @db.VarChar(128)
+  // SCRAM-SHA-256 (PostgreSQL) or caching_sha2_password/mysql_native_password hash
+  passwordAuthHash   String         @db.Text
+  maxUserConnections Int            @default(25)
+  createdAt          DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime       @updatedAt @db.Timestamptz(6)
+  deletedAt          DateTime?      @db.Timestamptz(6)
+
+  account          HostingAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  databaseInstance DatabaseInstance @relation(fields: [databaseInstanceId], references: [id], onDelete: Restrict)
+  grants           DatabaseGrant[]
+
+  @@unique([databaseInstanceId, dbUsername, allowedHostPattern])
+  @@index([accountId, engine, deletedAt])
+  @@index([resellerId])
+  @@map("database_accounts")
+}
+
+model DatabaseGrant {
+  id                String                 @id @default(uuid()) @db.Uuid
+  accountId         String                 @db.Uuid
+  resellerId        String?                @db.Uuid
+  hostedDatabaseId  String                 @db.Uuid
+  databaseAccountId String                 @db.Uuid
+  privilegeLevel    DatabasePrivilegeLevel @default(ALL_PRIVILEGES)
+  customGrantsJson  Json?                  @db.JsonB
+  createdAt         DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime               @updatedAt @db.Timestamptz(6)
+  deletedAt         DateTime?              @db.Timestamptz(6)
+
+  account         HostingAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  hostedDatabase  HostedDatabase  @relation(fields: [hostedDatabaseId], references: [id], onDelete: Cascade)
+  databaseAccount DatabaseAccount @relation(fields: [databaseAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([hostedDatabaseId, databaseAccountId])
+  @@index([accountId])
+  @@index([resellerId])
+  @@map("database_grants")
+}
+
+// =============================================================================
+// 6. APPLICATIONS, DEPLOYMENTS, SECRETS & PROCESSES
+// =============================================================================
+
+model Application {
+  id                String             @id @default(uuid()) @db.Uuid
+  accountId         String             @db.Uuid
+  resellerId        String?            @db.Uuid
+  domainId          String             @db.Uuid
+  name              String             @db.VarChar(120)
+  slug              String             @db.VarChar(120)
+  runtime           ApplicationRuntime
+  runtimeVersion    String             @db.VarChar(32)
+  appRootPath       String             @db.VarChar(512)
+  publicSubpath     String             @default("/") @db.VarChar(255)
+  startupCommand    String?            @db.VarChar(512)
+  internalPort      Int?
+  gitRepositoryUrl  String?            @db.VarChar(512)
+  gitBranch         String?            @default("main") @db.VarChar(128)
+  healthCheckPath   String             @default("/healthz") @db.VarChar(255)
+  autoRestart       Boolean            @default(true)
+  isEnabled         Boolean            @default(true)
+  createdAt         DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime           @updatedAt @db.Timestamptz(6)
+  deletedAt         DateTime?          @db.Timestamptz(6)
+
+  account     HostingAccount                 @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  domain      Domain                         @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  deployments ApplicationDeployment[]
+  secrets     ApplicationEnvironmentSecret[]
+  processes   ApplicationProcess[]
+
+  @@unique([accountId, slug])
+  @@index([accountId, domainId, isEnabled])
+  @@index([resellerId])
+  @@map("applications")
+}
+
+model ApplicationDeployment {
+  id                  String           @id @default(uuid()) @db.Uuid
+  accountId           String           @db.Uuid
+  resellerId          String?          @db.Uuid
+  applicationId       String           @db.Uuid
+  versionNumber       Int
+  gitCommitSha        String?          @db.VarChar(64)
+  artifactChecksum    String?          @db.VarChar(64)
+  status              DeploymentStatus @default(QUEUED)
+  buildLogPath        String?          @db.VarChar(512)
+  triggeredByUsername String           @db.VarChar(64)
+  startedAt           DateTime         @default(now()) @db.Timestamptz(6)
+  completedAt         DateTime?        @db.Timestamptz(6)
+  createdAt           DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime         @updatedAt @db.Timestamptz(6)
+  deletedAt           DateTime?        @db.Timestamptz(6)
+
+  account     HostingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  application Application    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, versionNumber])
+  @@index([accountId, applicationId, startedAt(sort: Desc)])
+  @@index([resellerId])
+  @@map("application_deployments")
+}
+
+model ApplicationEnvironmentSecret {
+  id                       String    @id @default(uuid()) @db.Uuid
+  accountId                String    @db.Uuid
+  resellerId               String?   @db.Uuid
+  applicationId            String    @db.Uuid
+  envKey                   String    @db.VarChar(128)
+  // AES-256-GCM Envelope-Encrypted Secret Value
+  encryptedValueCiphertext String    @db.Text
+  keyId                    String    @db.VarChar(128)
+  iv                       String    @db.VarChar(64)
+  authTag                  String    @db.VarChar(64)
+  createdAt                DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt                DateTime? @db.Timestamptz(6)
+
+  account     HostingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  application Application    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, envKey])
+  @@index([accountId, keyId])
+  @@index([resellerId])
+  @@map("application_environment_secrets")
+}
+
+model ApplicationProcess {
+  id               String       @id @default(uuid()) @db.Uuid
+  accountId        String       @db.Uuid
+  resellerId       String?      @db.Uuid
+  applicationId    String       @db.Uuid
+  systemdUnitName  String       @unique @db.VarChar(160)
+  workerIndex      Int          @default(1)
+  pid              Int?
+  state            ProcessState @default(RUNNING)
+  memoryRssMb      Int          @default(0)
+  cpuUsagePercent  Decimal      @default(0.00) @db.Decimal(5, 2)
+  restartCount     Int          @default(0)
+  lastStartedAt    DateTime?    @db.Timestamptz(6)
+  lastHealthCheckAt DateTime?   @db.Timestamptz(6)
+  createdAt        DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime     @updatedAt @db.Timestamptz(6)
+  deletedAt        DateTime?    @db.Timestamptz(6)
+
+  account     HostingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  application Application    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, workerIndex])
+  @@index([accountId, state])
+  @@index([resellerId])
+  @@map("application_processes")
+}
+
+// =============================================================================
+// 7. FILE OPERATIONS & SCHEDULED CRON TASKS
+// =============================================================================
+
+model FileOperation {
+  id              String            @id @default(uuid()) @db.Uuid
+  accountId       String            @db.Uuid
+  resellerId      String?           @db.Uuid
+  initiatedById   String            @db.Uuid
+  operationType   FileOperationType
+  sourcePath      String            @db.VarChar(1024)
+  destinationPath String?           @db.VarChar(1024)
+  bytesProcessed  BigInt            @default(0)
+  status          String            @default("COMPLETED") @db.VarChar(32)
+  clientIp        String            @db.VarChar(64)
+  errorMessage    String?           @db.Text
+  createdAt       DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime          @updatedAt @db.Timestamptz(6)
+  deletedAt       DateTime?         @db.Timestamptz(6)
+
+  account     HostingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  initiatedBy LocalUser      @relation(fields: [initiatedById], references: [id], onDelete: Restrict)
+
+  @@index([accountId, createdAt(sort: Desc)])
+  @@index([resellerId, operationType])
+  @@map("file_operations")
+}
+
+model ScheduledTask {
+  id                 String    @id @default(uuid()) @db.Uuid
+  accountId          String    @db.Uuid
+  resellerId         String?   @db.Uuid
+  label              String    @db.VarChar(120)
+  cronExpression     String    @db.VarChar(64)
+  command            String    @db.VarChar(1024)
+  timeoutSeconds     Int       @default(300)
+  notifyEmailOnError String?   @db.VarChar(320)
+  isEnabled          Boolean   @default(true)
+  lastRunAt          DateTime? @db.Timestamptz(6)
+  lastExitCode       Int?
+  lastDurationMs     Int?
+  nextRunAt          DateTime? @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt          DateTime? @db.Timestamptz(6)
+
+  account HostingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, isEnabled, deletedAt])
+  @@index([nextRunAt, isEnabled])
+  @@index([resellerId])
+  @@map("scheduled_tasks")
+}
+
+// =============================================================================
+// 8. BACKUP POLICIES, JOBS, RESTIC ARTIFACTS & RESTORE JOBS
+// =============================================================================
+
+model BackupPolicy {
+  id                              String               @id @default(uuid()) @db.Uuid
+  accountId                       String               @db.Uuid
+  resellerId                      String?              @db.Uuid
+  name                            String               @db.VarChar(120)
+  cronSchedule                    String               @default("0 2 * * *") @db.VarChar(64)
+  storageBackend                  BackupStorageBackend @default(S3_COMPATIBLE)
+  repositoryUri                   String               @db.VarChar(512)
+  // Envelope-encrypted repository password & storage credentials (AES-256-GCM)
+  encryptedRepoSecretCiphertext   String               @db.Text
+  repoSecretKeyId                 String               @db.VarChar(128)
+  repoSecretIv                    String               @db.VarChar(64)
+  repoSecretAuthTag               String               @db.VarChar(64)
+  keepDaily                       Int                  @default(7)
+  keepWeekly                      Int                  @default(4)
+  keepMonthly                     Int                  @default(6)
+  includeFiles                    Boolean              @default(true)
+  includeDatabases                Boolean              @default(true)
+  includeMailboxes                Boolean              @default(true)
+  isEnabled                       Boolean              @default(true)
+  createdAt                       DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt                       DateTime             @updatedAt @db.Timestamptz(6)
+  deletedAt                       DateTime?            @db.Timestamptz(6)
+
+  account HostingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  jobs    BackupJob[]
+
+  @@index([accountId, isEnabled, deletedAt])
+  @@index([resellerId])
+  @@map("backup_policies")
+}
+
+model BackupJob {
+  id              String          @id @default(uuid()) @db.Uuid
+  accountId       String          @db.Uuid
+  resellerId      String?         @db.Uuid
+  policyId        String?         @db.Uuid
+  status          BackupJobStatus @default(QUEUED)
+  isManualTrigger Boolean         @default(false)
+  bytesProcessed  BigInt          @default(0)
+  bytesAddedToRepo BigInt         @default(0)
+  errorSummary    String?         @db.Text
+  startedAt       DateTime        @default(now()) @db.Timestamptz(6)
+  completedAt     DateTime?       @db.Timestamptz(6)
+  createdAt       DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime        @updatedAt @db.Timestamptz(6)
+  deletedAt       DateTime?       @db.Timestamptz(6)
+
+  account   HostingAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  policy    BackupPolicy?   @relation(fields: [policyId], references: [id], onDelete: SetNull)
+  artifact  BackupArtifact?
+
+  @@index([accountId, status, startedAt(sort: Desc)])
+  @@index([resellerId])
+  @@map("backup_jobs")
+}
+
+model BackupArtifact {
+  id                    String    @id @default(uuid()) @db.Uuid
+  accountId             String    @db.Uuid
+  resellerId            String?   @db.Uuid
+  backupJobId           String    @unique @db.Uuid
+  resticSnapshotId      String    @unique @db.VarChar(128)
+  repositoryUri         String    @db.VarChar(512)
+  sha256Manifest        String    @db.VarChar(64)
+  manifestMetadataJson  Json      @db.JsonB
+  totalSizeBytes        BigInt
+  compressedSizeBytes   BigInt
+  isImmutableLocked     Boolean   @default(false)
+  expiresAt             DateTime? @db.Timestamptz(6)
+  lastRestoreVerifiedAt DateTime? @db.Timestamptz(6)
+  createdAt             DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt             DateTime? @db.Timestamptz(6)
+
+  account     HostingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  backupJob   BackupJob      @relation(fields: [backupJobId], references: [id], onDelete: Cascade)
+  restoreJobs RestoreJob[]
+
+  @@index([accountId, createdAt(sort: Desc)])
+  @@index([expiresAt, isImmutableLocked])
+  @@index([resellerId])
+  @@map("backup_artifacts")
+}
+
+model RestoreJob {
+  id                    String          @id @default(uuid()) @db.Uuid
+  accountId             String          @db.Uuid
+  resellerId            String?         @db.Uuid
+  backupArtifactId      String          @db.Uuid
+  scope                 RestoreScope    @default(FULL_ACCOUNT)
+  targetPathOverride    String?         @db.VarChar(512)
+  preRestoreSnapshotRef String?         @db.VarChar(128)
+  status                BackupJobStatus @default(QUEUED)
+  errorSummary          String?         @db.Text
+  startedAt             DateTime        @default(now()) @db.Timestamptz(6)
+  completedAt           DateTime?       @db.Timestamptz(6)
+  createdAt             DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime        @updatedAt @db.Timestamptz(6)
+  deletedAt             DateTime?       @db.Timestamptz(6)
+
+  account        HostingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  backupArtifact BackupArtifact @relation(fields: [backupArtifactId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, status, startedAt(sort: Desc)])
+  @@index([resellerId])
+  @@map("restore_jobs")
+}
+
+// =============================================================================
+// 9. PRIVILEGED AGENT JOBS, TELEMETRY, SECURITY & AUDIT LOGS
+// =============================================================================
+
+model AgentJob {
+  id                String         @id @default(uuid()) @db.Uuid
+  accountId         String?        @db.Uuid
+  resellerId        String?        @db.Uuid
+  idempotencyKey    String         @unique @db.VarChar(128)
+  operationName     String         @db.VarChar(120)
+  payloadSchemaVer  Int            @default(1)
+  requestParamsJson Json           @db.JsonB
+  dryRun            Boolean        @default(false)
+  status            AgentJobStatus @default(QUEUED)
+  snapshotId        String?        @db.VarChar(128)
+  rollbackStatus    RollbackStatus @default(NOT_REQUIRED)
+  errorCode         String?        @db.VarChar(64)
+  errorMessage      String?        @db.Text
+  startedAt         DateTime?      @db.Timestamptz(6)
+  completedAt       DateTime?      @db.Timestamptz(6)
+  createdAt         DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime       @updatedAt @db.Timestamptz(6)
+  deletedAt         DateTime?      @db.Timestamptz(6)
+
+  account HostingAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  steps   AgentJobStep[]
+
+  @@index([status, createdAt])
+  @@index([accountId, operationName, createdAt(sort: Desc)])
+  @@index([resellerId])
+  @@map("agent_jobs")
+}
+
+model AgentJobStep {
+  id                 String         @id @default(uuid()) @db.Uuid
+  agentJobId         String         @db.Uuid
+  stepOrder          Int
+  stepName           String         @db.VarChar(120)
+  status             AgentJobStatus @default(QUEUED)
+  compensatingAction String?        @db.VarChar(120)
+  stdoutSummary      String?        @db.Text
+  stderrSummary      String?        @db.Text
+  durationMs         Int?
+  startedAt          DateTime?      @db.Timestamptz(6)
+  completedAt        DateTime?      @db.Timestamptz(6)
+  createdAt          DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime       @updatedAt @db.Timestamptz(6)
+  deletedAt          DateTime?      @db.Timestamptz(6)
+
+  agentJob AgentJob @relation(fields: [agentJobId], references: [id], onDelete: Cascade)
+
+  @@unique([agentJobId, stepOrder])
+  @@index([agentJobId, status])
+  @@map("agent_job_steps")
+}
+
+model ServiceStatusEvent {
+  id                  String             @id @default(uuid()) @db.Uuid
+  serviceName         SystemServiceName
+  previousState       ServiceHealthState
+  currentState        ServiceHealthState
+  systemdActiveState  String             @db.VarChar(64)
+  systemdSubState     String             @db.VarChar(64)
+  pid                 Int?
+  memoryCurrentMb     Int?
+  autoRestartTriggered Boolean           @default(false)
+  diagnosticMessage   String?            @db.Text
+  createdAt           DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime           @updatedAt @db.Timestamptz(6)
+  deletedAt           DateTime?          @db.Timestamptz(6)
+
+  @@index([serviceName, createdAt(sort: Desc)])
+  @@index([currentState, createdAt(sort: Desc)])
+  @@map("service_status_events")
+}
+
+model MonitoringSample {
+  id                  String    @id @default(uuid()) @db.Uuid
+  accountId           String?   @db.Uuid
+  resellerId          String?   @db.Uuid
+  metricScope         String    @default("HOST") @db.VarChar(32)
+  cpuUsagePercent     Decimal   @db.Decimal(5, 2)
+  loadAvg1m           Decimal   @db.Decimal(6, 2)
+  memoryUsedMb        Int
+  memoryAvailableMb   Int
+  swapUsedMb          Int       @default(0)
+  diskUsedMb          BigInt
+  diskReadIops        Int       @default(0)
+  diskWriteIops       Int       @default(0)
+  netRxBytesPerSec    BigInt    @default(0)
+  netTxBytesPerSec    BigInt    @default(0)
+  // Explicit flag to distinguish synthetic/test seed telemetry from live agent metrics
+  isMockData          Boolean   @default(false)
+  sampledAt           DateTime  @default(now()) @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt           DateTime? @db.Timestamptz(6)
+
+  account HostingAccount? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, sampledAt(sort: Desc)])
+  @@index([metricScope, isMockData, sampledAt(sort: Desc)])
+  @@index([resellerId])
+  @@map("monitoring_samples")
+}
+
+model LocalSecurityEvent {
+  id             String                @id @default(uuid()) @db.Uuid
+  accountId      String?               @db.Uuid
+  resellerId     String?               @db.Uuid
+  actorUserId    String?               @db.Uuid
+  severity       SecurityEventSeverity
+  detectorSource String                @db.VarChar(64)
+  eventType      String                @db.VarChar(120)
+  sourceIp       String                @db.VarChar(64)
+  actionTaken    String                @db.VarChar(120)
+  detailsJson    Json                  @db.JsonB
+  createdAt      DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime              @updatedAt @db.Timestamptz(6)
+  deletedAt      DateTime?             @db.Timestamptz(6)
+
+  account   HostingAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  actorUser LocalUser?      @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([accountId, severity, createdAt(sort: Desc)])
+  @@index([sourceIp, createdAt(sort: Desc)])
+  @@index([resellerId])
+  @@map("security_events")
+}
+
+model LocalAuditLog {
+  id            String    @id @default(uuid()) @db.Uuid
+  accountId     String?   @db.Uuid
+  resellerId    String?   @db.Uuid
+  actorUserId   String?   @db.Uuid
+  actorUsername String    @db.VarChar(64)
+  actorRoleCode String    @db.VarChar(80)
+  action        String    @db.VarChar(150)
+  targetType    String    @db.VarChar(100)
+  targetId      String    @db.VarChar(128)
+  ipAddress     String    @db.VarChar(64)
+  userAgent     String?   @db.VarChar(512)
+  requestId     String    @db.VarChar(128)
+  changesJson   Json      @db.JsonB
+  integrityHash String    @db.VarChar(128)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt     DateTime? @db.Timestamptz(6)
+
+  account   HostingAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  actorUser LocalUser?      @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([accountId, createdAt(sort: Desc)])
+  @@index([resellerId, createdAt(sort: Desc)])
+  @@index([actorUserId, createdAt(sort: Desc)])
+  @@index([requestId])
+  @@map("audit_logs")
+}
