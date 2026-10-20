@@ -78,17 +78,10 @@ export interface BlurTextProps {
 
 export function BlurText({
   text,
-  delayMs = 45,
+  delayMs = 20,
   animateBy = 'words',
   className,
 }: BlurTextProps) {
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useEffect(() => {
-    const id = requestAnimationFrame(() => setMounted(true));
-    return () => cancelAnimationFrame(id);
-  }, [text]);
-
   const segments = animateBy === 'words' ? text.split(' ') : text.split('');
 
   return (
@@ -97,14 +90,9 @@ export function BlurText({
         <span
           key={`${segment}-${index}`}
           style={{
-            transitionDelay: `${index * delayMs}ms`,
+            animationDelay: `${Math.min(index * delayMs, 140)}ms`,
           }}
-          className={cn(
-            'inline-block transition-all duration-500 ease-out',
-            mounted
-              ? 'translate-y-0 opacity-100 blur-0'
-              : 'translate-y-2 opacity-0 blur-[6px]'
-          )}
+          className="inline-block animate-[nebulix-bar-rise_320ms_cubic-bezier(0.16,1,0.3,1)_both]"
         >
           {segment}
           {animateBy === 'words' && index < segments.length - 1 ? '\u00A0' : ''}
@@ -197,7 +185,7 @@ export interface CountUpProps {
 export function CountUp({
   to,
   from = 0,
-  durationMs = 950,
+  durationMs = 550,
   decimals = 0,
   prefix = '',
   suffix = '',
@@ -207,22 +195,30 @@ export function CountUp({
   const [current, setCurrent] = React.useState(from);
 
   React.useEffect(() => {
-    let startTimestamp: number | null = null;
-    let rafId: number;
+    if (
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    ) {
+      setCurrent(to);
+      return;
+    }
 
-    const step = (timestamp: number) => {
-      if (startTimestamp === null) startTimestamp = timestamp;
-      const progress = Math.min((timestamp - startTimestamp) / durationMs, 1);
-      // Cubic ease-out
+    const totalSteps = 20;
+    const stepInterval = Math.max(16, Math.floor(durationMs / totalSteps));
+    let stepCount = 0;
+
+    const timer = setInterval(() => {
+      stepCount += 1;
+      const progress = Math.min(stepCount / totalSteps, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
       setCurrent(from + (to - from) * eased);
-      if (progress < 1) {
-        rafId = requestAnimationFrame(step);
+      if (progress >= 1) {
+        clearInterval(timer);
+        setCurrent(to);
       }
-    };
+    }, stepInterval);
 
-    rafId = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(rafId);
+    return () => clearInterval(timer);
   }, [to, from, durationMs]);
 
   const formatted = React.useMemo(() => {
@@ -416,15 +412,15 @@ export function AnimatedContent({ children, delayMs = 0, className }: AnimatedCo
   const [visible, setVisible] = React.useState(false);
 
   React.useEffect(() => {
-    const timer = setTimeout(() => setVisible(true), delayMs);
+    const timer = setTimeout(() => setVisible(true), Math.min(delayMs, 120));
     return () => clearTimeout(timer);
   }, [delayMs]);
 
   return (
     <div
       className={cn(
-        'transition-all duration-500 ease-out',
-        visible ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0',
+        'transition-all duration-300 ease-out motion-reduce:transition-none motion-reduce:opacity-100 motion-reduce:translate-y-0',
+        visible ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-95',
         className
       )}
     >

@@ -2,6 +2,12 @@ import { getAuthorizedNavigationForRole } from '@garvix/ui-components';
 export { renderWhmPanelWebUiHtml } from './whm-ui.js';
 export { renderLicenseStoreHtml } from './license-store-ui.js';
 export { CustomerPanelApp } from './App.js';
+export { NebulixSidebar } from './components/dashboard/NebulixSidebar.js';
+export { NebulixWelcomeHero } from './components/dashboard/NebulixWelcomeHero.js';
+export { NebulixStatsGrid } from './components/dashboard/NebulixStatsGrid.js';
+export { NebulixServerMonitoring } from './components/dashboard/NebulixServerMonitoring.js';
+export { NebulixQuickActions } from './components/dashboard/NebulixQuickActions.js';
+
 
 /**
  * Garvix Customer Local Hosting Panel — cPanel Jupiter & WHM Style Web Interface
