@@ -7,6 +7,7 @@ export { NebulixWelcomeHero } from './components/dashboard/NebulixWelcomeHero.js
 export { NebulixStatsGrid } from './components/dashboard/NebulixStatsGrid.js';
 export { NebulixServerMonitoring } from './components/dashboard/NebulixServerMonitoring.js';
 export { NebulixQuickActions } from './components/dashboard/NebulixQuickActions.js';
+export { NebulixModulePages } from './components/dashboard/NebulixModulePages.js';
 
 
 /**
@@ -32,17 +33,17 @@ export function renderCustomerPanelWebUiHtml(): string {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --cp-orange: #ff6c2c;
-      --cp-orange-dark: #e05519;
-      --cp-header: #0f172a;
-      --cp-sidebar: #1e293b;
-      --cp-sidebar-active: #0f172a;
-      --cp-bg: #f4f6fb;
+      --cp-orange: #6d28d9;
+      --cp-orange-dark: #4f46e5;
+      --cp-header: #ffffff;
+      --cp-sidebar: #ffffff;
+      --cp-sidebar-active: #f5f3ff;
+      --cp-bg: #f7f6fd;
       --cp-card: #ffffff;
-      --cp-border: #e2e8f0;
-      --cp-text: #0f172a;
+      --cp-border: #e4e1f6;
+      --cp-text: #1e1b4b;
       --cp-muted: #64748b;
-      --cp-blue: #2563eb;
+      --cp-blue: #4f46e5;
       --cp-green: #16a34a;
       --cp-warn: #d97706;
       --cp-danger: #dc2626;
@@ -66,18 +67,19 @@ export function renderCustomerPanelWebUiHtml(): string {
       justify-content: space-between;
       align-items: center;
     }
-    /* Modern cPanel Top Navbar */
+    /* Modern Nebulix Light-Theme Top Navbar */
     .cp-topbar {
-      background: var(--cp-header);
-      color: #ffffff;
-      height: 62px;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(16px);
+      color: var(--cp-text);
+      height: 64px;
       padding: 0 22px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 16px;
-      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.15);
-      border-bottom: 1px solid #1e293b;
+      box-shadow: 0 8px 24px -10px rgba(99, 102, 241, 0.12);
+      border-bottom: 1px solid var(--cp-border);
       position: sticky;
       top: 0;
       z-index: 100;
@@ -90,27 +92,28 @@ export function renderCustomerPanelWebUiHtml(): string {
       flex-shrink: 0;
     }
     .cp-badge {
-      background: linear-gradient(135deg, #ff6c2c, #ea580c);
+      background: linear-gradient(135deg, #7c3aed, #4f46e5, #2563eb);
       color: #fff;
       font-weight: 800;
       font-size: 15px;
       padding: 6px 11px;
-      border-radius: 8px;
+      border-radius: 10px;
       letter-spacing: -0.5px;
-      box-shadow: 0 2px 8px rgba(255, 108, 44, 0.35);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.28);
     }
     .cp-brand-title {
       font-weight: 800;
       font-size: 16px;
       letter-spacing: -0.2px;
-      color: #ffffff;
+      color: #0f172a;
     }
     .cp-brand-sub {
       font-size: 11px;
-      color: #94a3b8;
+      color: #5b21b6;
       margin-left: 6px;
-      font-weight: 500;
-      background: #1e293b;
+      font-weight: 600;
+      background: #f5f3ff;
+      border: 1px solid #ddd6fe;
       padding: 2px 8px;
       border-radius: 999px;
     }
@@ -122,21 +125,21 @@ export function renderCustomerPanelWebUiHtml(): string {
     }
     .cp-search-input {
       width: 100%;
-      background: #1e293b;
-      border: 1px solid #334155;
-      color: #ffffff;
+      background: #f7f6fd;
+      border: 1px solid #ddd8f3;
+      color: #0f172a;
       padding: 9px 15px;
-      border-radius: 10px;
+      border-radius: 12px;
       font-size: 13px;
       font-family: inherit;
       transition: all 0.15s;
     }
-    .cp-search-input::placeholder { color: #94a3b8; }
+    .cp-search-input::placeholder { color: #64748b; }
     .cp-search-input:focus {
       outline: none;
-      border-color: var(--cp-orange);
-      background: #0f172a;
-      box-shadow: 0 0 0 3px rgba(255, 108, 44, 0.2);
+      border-color: #7c3aed;
+      background: #ffffff;
+      box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.14);
     }
     .cp-top-actions {
       display: flex;
@@ -145,21 +148,21 @@ export function renderCustomerPanelWebUiHtml(): string {
       flex-shrink: 0;
     }
     .cp-top-select {
-      background: #1e293b;
-      color: #e2e8f0;
-      border: 1px solid #334155;
-      border-radius: 8px;
+      background: #f7f6fd;
+      color: #334155;
+      border: 1px solid #ddd8f3;
+      border-radius: 10px;
       padding: 7px 10px;
       font-size: 12px;
-      font-weight: 500;
+      font-weight: 600;
       font-family: inherit;
       cursor: pointer;
     }
     .cp-btn {
-      background: var(--cp-orange);
+      background: linear-gradient(135deg, #7c3aed, #4f46e5, #2563eb);
       color: #ffffff;
       border: none;
-      border-radius: 8px;
+      border-radius: 10px;
       padding: 7px 14px;
       font-size: 12.5px;
       font-weight: 600;
@@ -169,16 +172,18 @@ export function renderCustomerPanelWebUiHtml(): string {
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
     }
-    .cp-btn:hover { background: var(--cp-orange-dark); transform: translateY(-1px); }
-    .cp-btn.blue { background: var(--cp-blue); }
-    .cp-btn.blue:hover { background: #1d4ed8; }
+    .cp-btn:hover { filter: brightness(1.05); transform: translateY(-1px); }
+    .cp-btn.blue { background: linear-gradient(135deg, #4f46e5, #2563eb); }
+    .cp-btn.blue:hover { filter: brightness(1.05); }
     .cp-btn.secondary {
       background: #ffffff;
       color: #334155;
-      border: 1px solid #cbd5e1;
+      border: 1px solid #ddd8f3;
+      box-shadow: none;
     }
-    .cp-btn.secondary:hover { background: #f8fafc; }
+    .cp-btn.secondary:hover { background: #f5f3ff; color: #5b21b6; }
     .cp-btn.danger {
       background: var(--cp-danger);
       color: #ffffff;
@@ -187,19 +192,20 @@ export function renderCustomerPanelWebUiHtml(): string {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      background: #1e293b;
-      border: 1px solid #334155;
+      background: #f5f3ff;
+      border: 1px solid #ddd6fe;
       padding: 6px 12px;
       border-radius: 999px;
       font-size: 12.5px;
-      color: #f8fafc;
+      font-weight: 600;
+      color: #4c1d95;
     }
 
     /* Main 3-Column cPanel Layout */
     .cp-shell {
       display: grid;
       grid-template-columns: 235px 1fr 305px;
-      min-height: calc(100vh - 62px);
+      min-height: calc(100vh - 64px);
     }
     @media (max-width: 1180px) {
       .cp-shell { grid-template-columns: 220px 1fr; }
@@ -209,9 +215,9 @@ export function renderCustomerPanelWebUiHtml(): string {
     /* Left Sidebar */
     .cp-left-nav {
       background: var(--cp-sidebar);
-      color: #cbd5e1;
+      color: #475569;
       padding: 16px 10px;
-      border-right: 1px solid #0f172a;
+      border-right: 1px solid var(--cp-border);
     }
     .cp-nav-group-title {
       font-size: 10.5px;
@@ -227,7 +233,7 @@ export function renderCustomerPanelWebUiHtml(): string {
       padding: 0;
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 3px;
     }
     .cp-nav-item {
       padding: 9px 12px;
@@ -235,21 +241,21 @@ export function renderCustomerPanelWebUiHtml(): string {
       align-items: center;
       gap: 10px;
       cursor: pointer;
-      color: #cbd5e1;
-      border-radius: 8px;
+      color: #475569;
+      border-radius: 10px;
       font-size: 13px;
-      font-weight: 500;
+      font-weight: 600;
       transition: all 0.12s;
     }
     .cp-nav-item:hover {
-      background: rgba(255,255,255,0.07);
-      color: #ffffff;
+      background: #f5f3ff;
+      color: #5b21b6;
     }
     .cp-nav-item.active {
-      background: var(--cp-orange);
+      background: linear-gradient(135deg, #7c3aed, #4f46e5, #2563eb);
       color: #ffffff;
       font-weight: 700;
-      box-shadow: 0 2px 8px rgba(255, 108, 44, 0.3);
+      box-shadow: 0 6px 16px rgba(99, 102, 241, 0.25);
     }
     .cp-nav-icon {
       width: 20px;
@@ -274,14 +280,15 @@ export function renderCustomerPanelWebUiHtml(): string {
       align-items: center;
     }
 
-    /* Welcome Quick-Launch Hero Card */
+    /* Welcome Quick-Launch Hero Card (Nebulix Light-Theme Banner) */
     .cp-hero-card {
-      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-      color: #ffffff;
-      border-radius: 16px;
+      background: linear-gradient(135deg, #ffffff 0%, #f5f3ff 55%, #eef2ff 100%);
+      border: 1px solid #ddd6fe;
+      color: #1e1b4b;
+      border-radius: 20px;
       padding: 22px 24px;
       margin-bottom: 22px;
-      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+      box-shadow: 0 12px 32px -12px rgba(99, 102, 241, 0.14);
       display: flex;
       flex-direction: column;
       gap: 16px;
@@ -300,10 +307,11 @@ export function renderCustomerPanelWebUiHtml(): string {
       display: flex;
       align-items: center;
       gap: 10px;
+      color: #1e1b4b;
     }
     .cp-hero-sub {
       font-size: 12.5px;
-      color: #94a3b8;
+      color: #64748b;
       margin-top: 4px;
     }
     .cp-quick-bar {
@@ -312,10 +320,10 @@ export function renderCustomerPanelWebUiHtml(): string {
       gap: 10px;
     }
     .cp-quick-btn {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.14);
-      color: #ffffff;
-      border-radius: 10px;
+      background: #ffffff;
+      border: 1px solid #ddd6fe;
+      color: #312e81;
+      border-radius: 12px;
       padding: 10px 14px;
       font-size: 13px;
       font-weight: 600;
@@ -324,10 +332,12 @@ export function renderCustomerPanelWebUiHtml(): string {
       align-items: center;
       gap: 9px;
       transition: all 0.15s;
+      box-shadow: 0 2px 8px rgba(99, 102, 241, 0.06);
     }
     .cp-quick-btn:hover {
-      background: rgba(255, 108, 44, 0.9);
-      border-color: var(--cp-orange);
+      background: linear-gradient(135deg, #7c3aed, #4f46e5, #2563eb);
+      color: #ffffff;
+      border-color: #6d28d9;
       transform: translateY(-1px);
     }
 

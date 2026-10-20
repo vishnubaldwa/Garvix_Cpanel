@@ -17,15 +17,15 @@ export function renderLicenseStoreHtml(
   <title>Garvix Panel Store — Buy &amp; Renew WHM + cPanel License</title>
   <style>
     :root {
-      --gv-dark: #0f172a;
-      --gv-orange: #ff6c2c;
-      --gv-orange-hover: #e85a1b;
-      --gv-blue: #2563eb;
+      --gv-dark: #1e1b4b;
+      --gv-orange: #6d28d9;
+      --gv-orange-hover: #4f46e5;
+      --gv-blue: #4f46e5;
       --gv-green: #16a34a;
-      --gv-bg: #f8fafc;
+      --gv-bg: #f7f6fd;
       --gv-card: #ffffff;
-      --gv-border: #e2e8f0;
-      --gv-text: #0f172a;
+      --gv-border: #e4e1f6;
+      --gv-text: #1e1b4b;
       --gv-muted: #64748b;
     }
     * { box-sizing: border-box; }
@@ -40,7 +40,8 @@ export function renderLicenseStoreHtml(
 
     /* Clean Sticky Navbar */
     .navbar {
-      background: #ffffff;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(16px);
       border-bottom: 1px solid var(--gv-border);
       padding: 14px 28px;
       display: flex;
@@ -49,7 +50,7 @@ export function renderLicenseStoreHtml(
       position: sticky;
       top: 0;
       z-index: 100;
-      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+      box-shadow: 0 8px 24px -10px rgba(99, 102, 241, 0.12);
       flex-wrap: wrap;
       gap: 14px;
     }
@@ -60,14 +61,14 @@ export function renderLicenseStoreHtml(
       cursor: pointer;
     }
     .brand-logo {
-      background: linear-gradient(135deg, #ff6c2c, #f97316);
+      background: linear-gradient(135deg, #7c3aed, #4f46e5, #2563eb);
       color: #fff;
       font-weight: 900;
       font-size: 16px;
       padding: 8px 14px;
-      border-radius: 8px;
+      border-radius: 10px;
       letter-spacing: 0.5px;
-      box-shadow: 0 4px 12px rgba(255, 108, 44, 0.25);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.28);
     }
     .brand-name {
       font-size: 18px;
@@ -83,9 +84,10 @@ export function renderLicenseStoreHtml(
 
     .nav-center {
       display: flex;
-      background: #f1f5f9;
+      background: #f5f3ff;
+      border: 1px solid #ddd6fe;
       padding: 4px;
-      border-radius: 10px;
+      border-radius: 12px;
       gap: 4px;
     }
     .nav-pill {
@@ -93,16 +95,16 @@ export function renderLicenseStoreHtml(
       background: transparent;
       color: #475569;
       padding: 9px 18px;
-      border-radius: 8px;
+      border-radius: 9px;
       font-weight: 700;
       font-size: 13.5px;
       cursor: pointer;
       transition: all 0.15s ease;
     }
     .nav-pill.active {
-      background: #ffffff;
-      color: var(--gv-orange);
-      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+      background: linear-gradient(135deg, #7c3aed, #4f46e5, #2563eb);
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.22);
     }
 
     .nav-right {
@@ -113,7 +115,7 @@ export function renderLicenseStoreHtml(
     .link-btn {
       text-decoration: none;
       padding: 8px 14px;
-      border-radius: 8px;
+      border-radius: 10px;
       font-weight: 700;
       font-size: 13px;
       border: 1px solid var(--gv-border);
@@ -124,8 +126,9 @@ export function renderLicenseStoreHtml(
       gap: 6px;
     }
     .link-btn:hover {
-      background: #f8fafc;
-      border-color: #cbd5e1;
+      background: #f5f3ff;
+      border-color: #c4b5fd;
+      color: #5b21b6;
     }
 
     .container {
@@ -142,9 +145,9 @@ export function renderLicenseStoreHtml(
     }
     .hero-badge {
       display: inline-block;
-      background: #fff7ed;
-      color: #c2410c;
-      border: 1px solid #fed7aa;
+      background: #f5f3ff;
+      color: #5b21b6;
+      border: 1px solid #ddd6fe;
       padding: 5px 14px;
       border-radius: 999px;
       font-size: 12.5px;
@@ -174,17 +177,18 @@ export function renderLicenseStoreHtml(
     .step-item {
       background: #ffffff;
       border: 1px solid var(--gv-border);
-      border-radius: 12px;
+      border-radius: 16px;
       padding: 16px 18px;
       display: flex;
       align-items: center;
       gap: 14px;
+      box-shadow: 0 10px 28px -12px rgba(99, 102, 241, 0.1);
     }
     .step-num {
       width: 36px;
       height: 36px;
       border-radius: 50%;
-      background: #fff7ed;
+      background: #f5f3ff;
       color: var(--gv-orange);
       font-weight: 900;
       font-size: 16px;
@@ -192,7 +196,7 @@ export function renderLicenseStoreHtml(
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      border: 2px solid #fed7aa;
+      border: 2px solid #ddd6fe;
     }
     .step-title {
       font-weight: 800;
@@ -207,7 +211,7 @@ export function renderLicenseStoreHtml(
     /* Billing Cycle Switch */
     .billing-toggle {
       display: inline-flex;
-      background: #e2e8f0;
+      background: #ede9fe;
       padding: 5px;
       border-radius: 999px;
       gap: 4px;
@@ -223,9 +227,9 @@ export function renderLicenseStoreHtml(
       cursor: pointer;
     }
     .billing-btn.active {
-      background: var(--gv-dark);
+      background: linear-gradient(135deg, #7c3aed, #4f46e5, #2563eb);
       color: #ffffff;
-      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
     }
     .save-pill {
       background: #16a34a;

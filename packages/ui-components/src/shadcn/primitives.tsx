@@ -3,26 +3,33 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../lib/utils.js';
 
 /* ==========================================================================
-   1. shadcn/ui Button
+   1. shadcn/ui Button (Nebulix Light-Theme Design System)
    ========================================================================== */
 export const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.99]',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-xs font-bold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.99]',
   {
     variants: {
       variant: {
-        default: 'bg-slate-900 text-white shadow-sm hover:bg-slate-800',
-        orange: 'bg-gradient-to-r from-[#ff6c2c] to-orange-600 text-white shadow-md shadow-orange-500/20 hover:from-[#f05a18] hover:to-orange-700',
-        blue: 'bg-blue-600 text-white shadow-md shadow-blue-600/20 hover:bg-blue-700',
-        emerald: 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-700',
+        default:
+          'bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600 text-white shadow-[0_10px_24px_-6px_rgba(79,70,229,0.5)] hover:-translate-y-0.5 hover:shadow-[0_14px_28px_-6px_rgba(79,70,229,0.65)]',
+        nebulix:
+          'bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600 text-white shadow-[0_10px_24px_-6px_rgba(79,70,229,0.5)] hover:-translate-y-0.5 hover:shadow-[0_14px_28px_-6px_rgba(79,70,229,0.65)]',
+        orange:
+          'bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600 text-white shadow-[0_10px_24px_-6px_rgba(79,70,229,0.5)] hover:-translate-y-0.5 hover:shadow-[0_14px_28px_-6px_rgba(79,70,229,0.65)]',
+        blue: 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-[0_8px_20px_-6px_rgba(37,99,235,0.45)] hover:-translate-y-0.5',
+        emerald:
+          'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-[0_8px_20px_-6px_rgba(16,185,129,0.45)] hover:-translate-y-0.5',
         destructive: 'bg-red-600 text-white shadow-sm hover:bg-red-700',
-        outline: 'border border-slate-200 bg-white text-slate-800 shadow-sm hover:bg-slate-50 hover:text-slate-950 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-100 dark:hover:bg-slate-800',
-        secondary: 'bg-slate-100 text-slate-900 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700',
-        ghost: 'text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/70 dark:hover:text-white',
+        outline:
+          'border border-indigo-200/90 bg-white text-indigo-950 shadow-2xs hover:border-indigo-300 hover:bg-indigo-50/60',
+        secondary:
+          'bg-indigo-50/90 text-indigo-800 border border-indigo-100 hover:bg-indigo-100/80',
+        ghost: 'text-slate-600 hover:bg-indigo-50/80 hover:text-indigo-950',
       },
       size: {
         default: 'h-10 px-4 py-2',
-        sm: 'h-8 rounded-md px-3 text-xs',
-        lg: 'h-11 rounded-xl px-6 text-base',
+        sm: 'h-8 rounded-xl px-3 text-xs',
+        lg: 'h-11 rounded-2xl px-6 text-sm',
         icon: 'h-9 w-9',
       },
     },
@@ -49,14 +56,14 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = 'Button';
 
 /* ==========================================================================
-   2. shadcn/ui Card Primitives
+   2. shadcn/ui Card Primitives (Nebulix Light Theme)
    ========================================================================== */
 export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
       className={cn(
-        'rounded-2xl border border-slate-200/80 bg-white text-slate-950 shadow-sm transition-all duration-200 dark:border-slate-800/80 dark:bg-slate-900/90 dark:text-slate-50',
+        'rounded-2xl border border-indigo-100/90 bg-white text-slate-900 shadow-[0_10px_30px_-12px_rgba(99,102,241,0.12)] transition-all duration-200',
         className
       )}
       {...props}
@@ -72,22 +79,26 @@ export const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<
 );
 CardHeader.displayName = 'CardHeader';
 
-export const CardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
-  ({ className, ...props }, ref) => (
-    <h3
-      ref={ref}
-      className={cn('text-base font-bold leading-none tracking-tight', className)}
-      {...props}
-    />
-  )
-);
+export const CardTitle = React.forwardRef<
+  HTMLHeadingElement,
+  React.HTMLAttributes<HTMLHeadingElement>
+>(({ className, ...props }, ref) => (
+  <h3
+    ref={ref}
+    className={cn(
+      'font-display text-base font-extrabold leading-none tracking-tight text-slate-900',
+      className
+    )}
+    {...props}
+  />
+));
 CardTitle.displayName = 'CardTitle';
 
 export const CardDescription = React.forwardRef<
   HTMLParagraphElement,
   React.HTMLAttributes<HTMLParagraphElement>
 >(({ className, ...props }, ref) => (
-  <p ref={ref} className={cn('text-xs text-slate-500 dark:text-slate-400', className)} {...props} />
+  <p ref={ref} className={cn('text-xs text-slate-500', className)} {...props} />
 ));
 CardDescription.displayName = 'CardDescription';
 
@@ -106,21 +117,21 @@ export const CardFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<
 CardFooter.displayName = 'CardFooter';
 
 /* ==========================================================================
-   3. shadcn/ui Badge
+   3. shadcn/ui Badge (Nebulix Light Theme)
    ========================================================================== */
 export const badgeVariants = cva(
-  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-bold transition-colors',
+  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-bold transition-colors',
   {
     variants: {
       variant: {
-        default: 'border-transparent bg-slate-900 text-slate-50 dark:bg-slate-100 dark:text-slate-900',
-        secondary: 'border-transparent bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200',
-        success: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
-        warning: 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400',
-        destructive: 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-400',
-        orange: 'border-orange-500/25 bg-orange-500/10 text-[#ff6c2c]',
-        blue: 'border-blue-500/25 bg-blue-500/10 text-blue-600 dark:text-blue-400',
-        outline: 'border-slate-300 text-slate-700 dark:border-slate-700 dark:text-slate-300',
+        default: 'border-indigo-200/80 bg-indigo-50 text-indigo-700',
+        secondary: 'border-slate-200 bg-slate-100 text-slate-700',
+        success: 'border-emerald-200/90 bg-emerald-50 text-emerald-700',
+        warning: 'border-amber-200/90 bg-amber-50 text-amber-800',
+        destructive: 'border-red-200 bg-red-50 text-red-700',
+        orange: 'border-violet-200/90 bg-violet-50 text-violet-700',
+        blue: 'border-blue-200/90 bg-blue-50 text-blue-700',
+        outline: 'border-indigo-200 text-indigo-800 bg-white',
       },
     },
     defaultVariants: {
@@ -138,7 +149,7 @@ export function Badge({ className, variant, ...props }: BadgeProps) {
 }
 
 /* ==========================================================================
-   4. shadcn/ui Input
+   4. shadcn/ui Input (Nebulix Light Theme)
    ========================================================================== */
 export const Input = React.forwardRef<
   HTMLInputElement,
@@ -148,7 +159,7 @@ export const Input = React.forwardRef<
     type={type}
     ref={ref}
     className={cn(
-      'flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus-visible:border-orange-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100',
+      'flex h-10 w-full rounded-xl border border-indigo-100 bg-[#FAF9FE] px-3.5 py-2 text-sm text-slate-900 shadow-2xs transition-colors placeholder:text-slate-400 focus-visible:border-indigo-400 focus-visible:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-50',
       className
     )}
     {...props}
@@ -157,7 +168,7 @@ export const Input = React.forwardRef<
 Input.displayName = 'Input';
 
 /* ==========================================================================
-   5. shadcn/ui Progress & Separator
+   5. shadcn/ui Progress & Separator (Nebulix Light Theme)
    ========================================================================== */
 export interface ProgressProps extends React.HTMLAttributes<HTMLDivElement> {
   value: number;
@@ -168,15 +179,12 @@ export function Progress({ value, className, indicatorClassName, ...props }: Pro
   const clamped = Math.max(0, Math.min(100, value));
   return (
     <div
-      className={cn(
-        'relative h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800',
-        className
-      )}
+      className={cn('relative h-2 w-full overflow-hidden rounded-full bg-indigo-100/80', className)}
       {...props}
     >
       <div
         className={cn(
-          'h-full rounded-full bg-gradient-to-r from-[#ff6c2c] to-orange-500 transition-all duration-500 ease-out',
+          'h-full rounded-full bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600 transition-all duration-500 ease-out',
           indicatorClassName
         )}
         style={{ width: `${clamped}%` }}
@@ -187,15 +195,12 @@ export function Progress({ value, className, indicatorClassName, ...props }: Pro
 
 export function Separator({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div
-      className={cn('h-[1px] w-full shrink-0 bg-slate-200 dark:bg-slate-800', className)}
-      {...props}
-    />
+    <div className={cn('h-[1px] w-full shrink-0 bg-indigo-100/80', className)} {...props} />
   );
 }
 
 /* ==========================================================================
-   6. shadcn/ui DialogModal
+   6. shadcn/ui DialogModal (Nebulix Light Theme)
    ========================================================================== */
 export interface DialogModalProps {
   open: boolean;
@@ -217,30 +222,28 @@ export function DialogModal({
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 p-4 backdrop-blur-xs animate-in fade-in duration-150"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         className={cn(
-          'relative w-full rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900',
+          'relative w-full rounded-3xl border border-indigo-100 bg-white p-6 text-slate-900 shadow-[0_25px_70px_-15px_rgba(79,70,229,0.28)]',
           maxWidthClass
         )}
       >
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+          className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
           aria-label="Close modal"
         >
           ✕
         </button>
         {title && (
           <div className="mb-4">
-            <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">{title}</h2>
-            {description && (
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{description}</p>
-            )}
+            <h2 className="font-display text-lg font-extrabold text-slate-900">{title}</h2>
+            {description && <p className="mt-1 text-xs text-slate-500">{description}</p>}
           </div>
         )}
         {children}

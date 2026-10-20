@@ -14,17 +14,17 @@ export function renderWhmPanelWebUiHtml(): string {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --whm-orange: #ff6c2c;
-      --whm-orange-hover: #e55a1d;
-      --whm-top: #0f172a;
-      --whm-sidebar: #1e293b;
-      --whm-sidebar-border: #0f172a;
-      --whm-bg: #f4f6fb;
+      --whm-orange: #6d28d9;
+      --whm-orange-hover: #4f46e5;
+      --whm-top: #ffffff;
+      --whm-sidebar: #ffffff;
+      --whm-sidebar-border: #e4e1f6;
+      --whm-bg: #f7f6fd;
       --whm-card: #ffffff;
-      --whm-border: #e2e8f0;
-      --whm-text: #0f172a;
+      --whm-border: #e4e1f6;
+      --whm-text: #1e1b4b;
       --whm-muted: #64748b;
-      --whm-blue: #2563eb;
+      --whm-blue: #4f46e5;
       --whm-green: #16a34a;
       --whm-warn: #d97706;
       --whm-danger: #dc2626;
@@ -47,18 +47,19 @@ export function renderWhmPanelWebUiHtml(): string {
       justify-content: space-between;
       align-items: center;
     }
-    /* Modern WHM Top Header Bar */
+    /* Modern Nebulix WHM Top Header Bar */
     .whm-header {
-      background: var(--whm-top);
-      color: #ffffff;
-      height: 62px;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(16px);
+      color: var(--whm-text);
+      height: 64px;
       padding: 0 22px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 16px;
-      border-bottom: 1px solid #1e293b;
-      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.15);
+      border-bottom: 1px solid var(--whm-border);
+      box-shadow: 0 8px 24px -10px rgba(99, 102, 241, 0.12);
       position: sticky;
       top: 0;
       z-index: 100;
@@ -70,14 +71,14 @@ export function renderWhmPanelWebUiHtml(): string {
       cursor: pointer;
     }
     .whm-logo-box {
-      background: linear-gradient(135deg, #ff6c2c, #ea580c);
+      background: linear-gradient(135deg, #7c3aed, #4f46e5, #2563eb);
       color: #ffffff;
       font-weight: 800;
       font-size: 15px;
       padding: 6px 11px;
-      border-radius: 8px;
+      border-radius: 10px;
       letter-spacing: 0.3px;
-      box-shadow: 0 2px 8px rgba(255, 108, 44, 0.35);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.28);
     }
     .whm-host-meta {
       display: flex;
@@ -87,23 +88,23 @@ export function renderWhmPanelWebUiHtml(): string {
     .whm-host-name {
       font-weight: 800;
       font-size: 14.5px;
-      color: #f8fafc;
+      color: #1e1b4b;
     }
     .whm-host-sub {
       font-size: 11px;
-      color: #94a3b8;
-      font-weight: 500;
+      color: #64748b;
+      font-weight: 600;
     }
     .whm-telemetry-pills {
       display: flex;
       align-items: center;
       gap: 14px;
       font-size: 12px;
-      color: #cbd5e1;
-      background: #1e293b;
+      color: #4c1d95;
+      background: #f5f3ff;
       padding: 7px 14px;
-      border-radius: 10px;
-      border: 1px solid #334155;
+      border-radius: 12px;
+      border: 1px solid #ddd6fe;
     }
     .whm-top-right {
       display: flex;
@@ -111,10 +112,10 @@ export function renderWhmPanelWebUiHtml(): string {
       gap: 8px;
     }
     .whm-btn {
-      background: var(--whm-orange);
+      background: linear-gradient(135deg, #7c3aed, #4f46e5, #2563eb);
       color: #ffffff;
       border: none;
-      border-radius: 8px;
+      border-radius: 10px;
       padding: 7px 14px;
       font-size: 12.5px;
       font-weight: 600;
@@ -125,65 +126,68 @@ export function renderWhmPanelWebUiHtml(): string {
       align-items: center;
       gap: 6px;
       transition: all 0.15s;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
     }
-    .whm-btn:hover { background: var(--whm-orange-hover); transform: translateY(-1px); }
-    .whm-btn.blue { background: var(--whm-blue); }
-    .whm-btn.blue:hover { background: #1d4ed8; }
+    .whm-btn:hover { filter: brightness(1.05); transform: translateY(-1px); }
+    .whm-btn.blue { background: linear-gradient(135deg, #4f46e5, #2563eb); }
+    .whm-btn.blue:hover { filter: brightness(1.05); }
     .whm-btn.secondary {
       background: #ffffff;
       color: #334155;
-      border: 1px solid #cbd5e1;
+      border: 1px solid #ddd8f3;
+      box-shadow: none;
     }
-    .whm-btn.secondary:hover { background: #f8fafc; }
+    .whm-btn.secondary:hover { background: #f5f3ff; color: #5b21b6; }
     .whm-btn.danger {
       background: var(--whm-danger);
       color: #ffffff;
     }
     .cp-launch-btn {
-      background: linear-gradient(135deg, #ff6c2c, #ea580c);
+      background: linear-gradient(135deg, #7c3aed, #4f46e5, #2563eb);
       color: #ffffff;
       font-weight: 800;
       font-size: 11.5px;
       padding: 4px 10px;
-      border-radius: 6px;
+      border-radius: 8px;
       text-decoration: none;
       display: inline-block;
       cursor: pointer;
       border: none;
-      box-shadow: 0 2px 6px rgba(255, 108, 44, 0.25);
+      box-shadow: 0 2px 6px rgba(99, 102, 241, 0.25);
     }
-    .cp-launch-btn:hover { background: var(--whm-orange-hover); }
+    .cp-launch-btn:hover { filter: brightness(1.05); }
 
     /* WHM 2-Column Layout */
     .whm-layout {
       display: grid;
       grid-template-columns: 260px 1fr;
-      min-height: calc(100vh - 62px);
+      min-height: calc(100vh - 64px);
     }
     .whm-sidebar {
       background: var(--whm-sidebar);
-      color: #e2e8f0;
+      color: #475569;
       border-right: 1px solid var(--whm-sidebar-border);
       padding: 16px 10px;
     }
     .whm-search-box {
       padding: 0 6px 14px;
-      border-bottom: 1px solid #334155;
+      border-bottom: 1px solid #e4e1f6;
     }
     .whm-search-input {
       width: 100%;
-      background: #0f172a;
-      border: 1px solid #334155;
-      color: #ffffff;
+      background: #f7f6fd;
+      border: 1px solid #ddd8f3;
+      color: #0f172a;
       padding: 9px 13px;
       border-radius: 10px;
       font-size: 12.5px;
       font-family: inherit;
     }
-    .whm-search-input::placeholder { color: #94a3b8; }
+    .whm-search-input::placeholder { color: #64748b; }
     .whm-search-input:focus {
       outline: none;
-      border-color: var(--whm-orange);
+      border-color: #7c3aed;
+      background: #ffffff;
     }
     .whm-cat-title {
       font-size: 10.5px;
@@ -199,29 +203,29 @@ export function renderWhmPanelWebUiHtml(): string {
       padding: 0;
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 3px;
     }
     .whm-nav-item {
       padding: 9px 12px;
       cursor: pointer;
-      color: #cbd5e1;
+      color: #475569;
       display: flex;
       align-items: center;
       gap: 10px;
-      border-radius: 8px;
+      border-radius: 10px;
       font-size: 13px;
-      font-weight: 500;
+      font-weight: 600;
       transition: all 0.12s;
     }
     .whm-nav-item:hover {
-      background: rgba(255,255,255,0.07);
-      color: #ffffff;
+      background: #f5f3ff;
+      color: #5b21b6;
     }
     .whm-nav-item.active {
-      background: var(--whm-orange);
+      background: linear-gradient(135deg, #7c3aed, #4f46e5, #2563eb);
       color: #ffffff;
       font-weight: 700;
-      box-shadow: 0 2px 8px rgba(255, 108, 44, 0.3);
+      box-shadow: 0 6px 16px rgba(99, 102, 241, 0.25);
     }
 
     /* WHM Main Content */

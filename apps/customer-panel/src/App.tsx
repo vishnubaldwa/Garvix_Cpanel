@@ -29,6 +29,8 @@ import {
   Input,
   Separator,
   DialogModal,
+  SpotlightCard,
+  BlurText,
   DecryptedText,
   AuroraBackground,
   StarBorder,
@@ -44,6 +46,7 @@ import { NebulixWelcomeHero } from './components/dashboard/NebulixWelcomeHero.js
 import { NebulixStatsGrid } from './components/dashboard/NebulixStatsGrid.js';
 import { NebulixServerMonitoring } from './components/dashboard/NebulixServerMonitoring.js';
 import { NebulixQuickActions } from './components/dashboard/NebulixQuickActions.js';
+import { NebulixModulePages } from './components/dashboard/NebulixModulePages.js';
 
 type PanelSurface = 'cpanel' | 'whm' | 'store' | 'login';
 
@@ -237,6 +240,7 @@ export function CustomerPanelApp(): React.ReactElement {
     const rand = Math.random().toString(16).substring(2, 6).toUpperCase();
     setIssuedStoreKey(`GVX-${checkoutPlan.code}-${rand}-77E1-E25519`);
     setCheckoutPlan(null);
+    showToast(`Razorpay payment verified! Issued license key for ${checkoutPlan.name}.`);
   };
 
   return (
@@ -299,7 +303,7 @@ export function CustomerPanelApp(): React.ReactElement {
                 <option value="READ_ONLY_AUDITOR">Role: READ_ONLY_AUDITOR</option>
               </select>
 
-              {/* Surface Switcher (Preserves access to WHM, Store, and Login without modifying them) */}
+              {/* Surface Switcher */}
               <div className="flex rounded-xl border border-indigo-100 bg-[#F7F6FD] p-0.5 sm:p-1">
                 {(
                   [
@@ -367,9 +371,9 @@ export function CustomerPanelApp(): React.ReactElement {
           {/* Main Workspace Container */}
           <main className="mx-auto w-full max-w-[1400px] min-w-0 flex-1 space-y-8 px-4 py-6 sm:px-8 sm:py-8">
             {/* =================================================================
-                SURFACE 1: REDESIGNED NEBULIX CUSTOMER PANEL DASHBOARD HOMEPAGE
+                SURFACE 1: NEBULIX CUSTOMER PANEL (DASHBOARD + ALL 9 SUBMODULES)
                ================================================================= */}
-            {activeSurface === 'cpanel' && (
+            {activeSurface === 'cpanel' && activeSidebarItem === 'dashboard' && (
               <div className="space-y-8">
                 {/* SECTION B: Welcome Section with BlurText, GradientText & Floating Cloud SVG */}
                 <AnimatedContent delayMs={0}>
@@ -500,138 +504,171 @@ export function CustomerPanelApp(): React.ReactElement {
               </div>
             )}
 
+            {/* INNER SIDEBAR MODULE VIEWS (NEBULIX LIGHT THEME) */}
+            {activeSurface === 'cpanel' && activeSidebarItem !== 'dashboard' && (
+              <NebulixModulePages
+                section={activeSidebarItem}
+                dnsRecords={dnsRecords}
+                databases={databases}
+                emailCount={emailCount}
+                sslCount={sslCount}
+                onOpenDnsModal={() => setDnsModalOpen(true)}
+                onOpenEmailModal={() => setEmailModalOpen(true)}
+                onCreateDatabase={handleCreateDatabase}
+                onOpenSslModal={() => setSslModalOpen(true)}
+                onShowToast={showToast}
+              />
+            )}
+
             {/* =================================================================
-                OTHER SURFACES (WHM, STORE, LOGIN) — PRESERVED UNCHANGED
+                SURFACE 2: WHM SERVER & RESELLER CONSOLE (NEBULIX LIGHT THEME)
                ================================================================= */}
             {activeSurface === 'whm' && (
               <AnimatedContent className="space-y-6">
-                <Card className="border-slate-800 bg-slate-900/95 text-slate-100">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <Badge variant="orange">WHM ROOT &amp; RESELLER CONSOLE</Badge>
-                      <Badge variant="success">12-Step Go Agent Pipeline Active</Badge>
+                <AuroraBackground className="p-6 sm:p-8">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="orange">WHM ROOT &amp; RESELLER CONSOLE</Badge>
+                        <Badge variant="success">12-Step Go Agent Pipeline Active</Badge>
+                      </div>
+                      <h1 className="mt-2 font-display text-2xl font-extrabold text-slate-900 sm:text-3xl flex items-center gap-2.5">
+                        <ServerCog className="h-7 w-7 text-indigo-600" />
+                        <BlurText text="Transactional Account Provisioning & systemd Control" />
+                      </h1>
+                      <p className="mt-1 text-xs text-slate-600 max-w-2xl">
+                        Every privileged operation executes over `/run/garvix-agent/agent.sock` with
+                        SO_PEERCRED verification, dry-run preview, and automatic rollback on
+                        failure.
+                      </p>
                     </div>
-                    <CardTitle className="mt-2 text-xl text-white flex items-center gap-2">
-                      <ServerCog className="h-5 w-5 text-orange-400" />
-                      Transactional Account Provisioning &amp; systemd Service Control
-                    </CardTitle>
-                    <CardDescription className="text-slate-400">
-                      Every privileged operation executes over `/run/garvix-agent/agent.sock` with
-                      SO_PEERCRED verification, dry-run preview, and automatic rollback on failure.
+                    <Button
+                      onClick={() =>
+                        showToast(
+                          'Provisioned tenant account through 6-step state machine (PREFLIGHT -> ACTIVE).'
+                        )
+                      }
+                    >
+                      <Plus className="h-4 w-4" /> Provision Hosting Account
+                    </Button>
+                  </div>
+                </AuroraBackground>
+
+                <div className="grid gap-4 sm:grid-cols-3">
+                  {[
+                    {
+                      unit: 'nginx.service',
+                      desc: 'Reverse Proxy & HTTP/3 VirtualHosts',
+                      state: 'ACTIVE (running)',
+                    },
+                    {
+                      unit: 'php83-php-fpm.service',
+                      desc: 'Per-Tenant UID/GID FPM Pools',
+                      state: 'ACTIVE (running)',
+                    },
+                    {
+                      unit: 'garvix-agent.service',
+                      desc: 'Go 1.22 Privileged IPC Daemon',
+                      state: 'ACTIVE (enforcing)',
+                    },
+                  ].map((svc) => (
+                    <SpotlightCard key={svc.unit} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-xs font-bold text-indigo-950">
+                          {svc.unit}
+                        </span>
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      </div>
+                      <p className="text-xs text-slate-500">{svc.desc}</p>
+                      <Badge variant="success" className="mt-2">
+                        {svc.state}
+                      </Badge>
+                    </SpotlightCard>
+                  ))}
+                </div>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>6-Stage Transactional Provisioning State Machine</CardTitle>
+                    <CardDescription>
+                      Automatic snapshot rollback (`FAILED_ROLLED_BACK`) if any step or `nginx -t` /
+                      `named-checkzone` validation fails.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
                       {[
-                        {
-                          unit: 'nginx.service',
-                          desc: 'Reverse Proxy & HTTP/3 VirtualHosts',
-                          state: 'ACTIVE (running)',
-                        },
-                        {
-                          unit: 'php83-php-fpm.service',
-                          desc: 'Per-Tenant UID/GID FPM Pools',
-                          state: 'ACTIVE (running)',
-                        },
-                        {
-                          unit: 'garvix-agent.service',
-                          desc: 'Go 1.22 Privileged IPC Daemon',
-                          state: 'ACTIVE (enforcing)',
-                        },
-                      ].map((svc) => (
-                        <div
-                          key={svc.unit}
-                          className="rounded-xl border border-slate-800 bg-slate-950 p-4"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-mono text-xs font-bold text-white">
-                              {svc.unit}
-                            </span>
-                            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                          </div>
-                          <p className="mt-1 text-xs text-slate-400">{svc.desc}</p>
-                          <Badge variant="success" className="mt-3">
-                            {svc.state}
-                          </Badge>
-                        </div>
+                        'PREFLIGHT',
+                        'PROVISIONING_LINUX_USER',
+                        'PROVISIONING_HOME_FS',
+                        'PROVISIONING_WEB_VHOST',
+                        'PROVISIONING_DNS',
+                        'ACTIVE',
+                      ].map((step) => (
+                        <Badge key={step} variant={step === 'ACTIVE' ? 'success' : 'default'}>
+                          {step}
+                        </Badge>
                       ))}
-                    </div>
-
-                    <Separator className="bg-slate-800" />
-
-                    <div>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                        Account Provisioning State Machine
-                      </h4>
-                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-mono">
-                        {[
-                          'PREFLIGHT',
-                          'PROVISIONING_LINUX_USER',
-                          'PROVISIONING_HOME_FS',
-                          'PROVISIONING_WEB_VHOST',
-                          'PROVISIONING_DNS',
-                          'ACTIVE',
-                        ].map((step) => (
-                          <Badge key={step} variant={step === 'ACTIVE' ? 'success' : 'secondary'}>
-                            {step}
-                          </Badge>
-                        ))}
-                      </div>
                     </div>
                   </CardContent>
                 </Card>
               </AnimatedContent>
             )}
 
+            {/* =================================================================
+                SURFACE 3: RAZORPAY COMMERCIAL LICENSE STORE (NEBULIX LIGHT THEME)
+               ================================================================= */}
             {activeSurface === 'store' && (
               <AnimatedContent className="space-y-6">
-                <AuroraBackground className="border border-slate-800 p-6">
+                <AuroraBackground className="p-6 sm:p-8">
                   <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div>
                       <Badge variant="orange">RAZORPAY CHECKOUT + INSTANT ED25519 LICENSE</Badge>
-                      <h2 className="mt-2 text-2xl font-black text-white">
-                        Garvix Commercial License Store (SAC 998315 · 18% GST)
+                      <h2 className="mt-2 font-display text-2xl font-extrabold text-slate-900 sm:text-3xl">
+                        <BlurText text="Garvix Commercial License Store (SAC 998315 · 18% GST)" />
                       </h2>
-                      <p className="mt-1 text-xs text-slate-300">
+                      <p className="mt-1 text-xs text-slate-600 max-w-2xl">
                         Pay via UPI QR, Credit Card, Debit Card, or NetBanking. Automatically
                         creates your Customer Portal account and binds an Ed25519 license key to
                         your server IP.
                       </p>
                     </div>
-                    <div className="rounded-xl border border-slate-800 bg-slate-900/90 px-4 py-3 text-xs">
-                      <div className="text-slate-400">Latest Issued License Key:</div>
-                      <div className="mt-1 font-mono text-sm font-bold text-orange-400">
+                    <div className="rounded-2xl border border-indigo-100 bg-white px-5 py-3.5 text-xs shadow-sm">
+                      <div className="font-semibold text-slate-500">Latest Issued License Key:</div>
+                      <div className="mt-1 font-mono text-sm font-extrabold text-indigo-700">
                         <DecryptedText text={issuedStoreKey} />
                       </div>
                     </div>
                   </div>
                 </AuroraBackground>
 
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
                   {STORE_PLANS.map((plan) => (
                     <TiltedCard key={plan.code} maxTiltDeg={4}>
-                      <StarBorder color={plan.popular ? '#ff6c2c' : '#334155'} className="h-full">
-                        <div className="flex h-full flex-col justify-between rounded-[15px] bg-slate-900 p-5">
+                      <StarBorder color={plan.popular ? '#6366F1' : '#C7D2FE'} className="h-full">
+                        <div className="flex h-full flex-col justify-between rounded-[15px] bg-white p-5">
                           <div>
                             <Badge variant={plan.popular ? 'orange' : 'secondary'}>
                               {plan.badge}
                             </Badge>
-                            <h3 className="mt-3 text-lg font-extrabold text-white">{plan.name}</h3>
-                            <div className="mt-2 text-2xl font-black text-white">
+                            <h3 className="mt-3 font-display text-lg font-extrabold text-slate-900">
+                              {plan.name}
+                            </h3>
+                            <div className="mt-2 font-display text-3xl font-extrabold text-slate-900">
                               {plan.priceInr === 0 ? 'Free' : `₹${plan.priceInr}`}
                               {plan.priceInr > 0 && (
-                                <span className="text-xs font-normal text-slate-400">
+                                <span className="text-xs font-medium text-slate-500">
                                   {' '}
                                   / month (incl. GST)
                                 </span>
                               )}
                             </div>
-                            <p className="mt-2 text-xs text-slate-300">{plan.accounts}</p>
+                            <p className="mt-2 text-xs text-slate-600">{plan.accounts}</p>
                           </div>
 
                           <Button
-                            variant={plan.popular ? 'orange' : 'blue'}
-                            className="mt-5 w-full"
+                            variant={plan.popular ? 'nebulix' : 'outline'}
+                            className="mt-6 w-full"
                             onClick={() => setCheckoutPlan(plan)}
                           >
                             <CreditCard className="h-4 w-4" />
@@ -645,42 +682,47 @@ export function CustomerPanelApp(): React.ReactElement {
               </AnimatedContent>
             )}
 
+            {/* =================================================================
+                SURFACE 4: CUSTOMER vs ADMIN LOGIN PORTAL (NEBULIX LIGHT THEME)
+               ================================================================= */}
             {activeSurface === 'login' && (
               <AnimatedContent>
-                <Card className="border-slate-800 bg-slate-900/95 text-slate-100 max-w-xl mx-auto">
-                  <CardHeader>
-                    <div className="flex gap-2">
-                      <Button
-                        variant={loginMode === 'CUSTOMER' ? 'orange' : 'outline'}
-                        size="sm"
-                        onClick={() => setLoginMode('CUSTOMER')}
-                      >
-                        <UserCheck className="h-4 w-4" />
-                        Customer Portal Login
-                      </Button>
-                      <Button
-                        variant={loginMode === 'ADMIN' ? 'blue' : 'outline'}
-                        size="sm"
-                        onClick={() => setLoginMode('ADMIN')}
-                      >
-                        <KeyRound className="h-4 w-4" />
-                        Super Admin Login
-                      </Button>
-                    </div>
-                    <CardTitle className="mt-4 text-white">
+                <AuroraBackground className="mx-auto max-w-xl p-6 sm:p-8">
+                  <div className="flex gap-2">
+                    <Button
+                      variant={loginMode === 'CUSTOMER' ? 'nebulix' : 'outline'}
+                      size="sm"
+                      onClick={() => setLoginMode('CUSTOMER')}
+                    >
+                      <UserCheck className="h-4 w-4" />
+                      Customer Portal Login
+                    </Button>
+                    <Button
+                      variant={loginMode === 'ADMIN' ? 'blue' : 'outline'}
+                      size="sm"
+                      onClick={() => setLoginMode('ADMIN')}
+                    >
+                      <KeyRound className="h-4 w-4" />
+                      Super Admin Login
+                    </Button>
+                  </div>
+
+                  <div className="mt-5">
+                    <h2 className="font-display text-xl font-extrabold text-slate-900">
                       {loginMode === 'CUSTOMER'
                         ? 'Customer License & Billing Portal'
                         : 'Garvix Super Admin Portal'}
-                    </CardTitle>
-                    <CardDescription className="text-slate-400">
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-600">
                       {loginMode === 'CUSTOMER'
                         ? 'View only your own purchased Ed25519 licenses, rebind server IPs, and download GST invoices.'
                         : 'Restricted to Garvix Super Administrators with hardware MFA / TOTP verification.'}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
+                    </p>
+                  </div>
+
+                  <div className="mt-5 space-y-4">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-300">Email Address</label>
+                      <label className="text-xs font-bold text-slate-700">Email Address</label>
                       <Input
                         defaultValue={
                           loginMode === 'CUSTOMER' ? 'customer@company.in' : 'admin@garvix.com'
@@ -688,19 +730,26 @@ export function CustomerPanelApp(): React.ReactElement {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-300">Password</label>
+                      <label className="text-xs font-bold text-slate-700">Password</label>
                       <Input type="password" defaultValue="••••••••••••" />
                     </div>
                     <Button
-                      variant={loginMode === 'CUSTOMER' ? 'orange' : 'blue'}
+                      variant="nebulix"
                       className="w-full"
-                      onClick={() => setActiveSurface('cpanel')}
+                      onClick={() => {
+                        setActiveSurface('cpanel');
+                        showToast(
+                          `Authenticated into ${
+                            loginMode === 'CUSTOMER' ? 'Customer Portal' : 'Admin Console'
+                          }.`
+                        );
+                      }}
                     >
                       <Lock className="h-4 w-4" />
                       Sign In to {loginMode === 'CUSTOMER' ? 'Customer Portal' : 'Admin Console'}
                     </Button>
-                  </CardContent>
-                </Card>
+                  </div>
+                </AuroraBackground>
               </AnimatedContent>
             )}
           </main>
@@ -723,7 +772,7 @@ export function CustomerPanelApp(): React.ReactElement {
             <select
               value={newDnsType}
               onChange={(e) => setNewDnsType(e.target.value as DnsRecordItem['type'])}
-              className="flex h-10 w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm text-slate-900"
+              className="flex h-10 w-full rounded-xl border border-indigo-100 bg-[#FAF9FE] px-3 py-2 text-sm text-slate-900"
             >
               <option value="A">A (IPv4 Address)</option>
               <option value="AAAA">AAAA (IPv6 Address)</option>
@@ -754,10 +803,7 @@ export function CustomerPanelApp(): React.ReactElement {
             <Button type="button" variant="outline" onClick={() => setDnsModalOpen(false)}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              className="bg-gradient-to-r from-violet-600 to-blue-600 text-white"
-            >
+            <Button type="submit" variant="nebulix">
               <RefreshCw className="h-4 w-4" />
               Validate &amp; Add Record
             </Button>
@@ -789,10 +835,7 @@ export function CustomerPanelApp(): React.ReactElement {
             <Button type="button" variant="outline" onClick={() => setEmailModalOpen(false)}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              className="bg-gradient-to-r from-violet-600 to-blue-600 text-white"
-            >
+            <Button type="submit" variant="nebulix">
               <Mail className="h-4 w-4" />
               Create Mailbox
             </Button>
@@ -830,8 +873,8 @@ export function CustomerPanelApp(): React.ReactElement {
           <div className="flex justify-end pt-2">
             <Button
               type="button"
+              variant="nebulix"
               onClick={() => setFileManagerModalOpen(false)}
-              className="bg-gradient-to-r from-violet-600 to-blue-600 text-white"
             >
               Done
             </Button>
@@ -860,10 +903,7 @@ export function CustomerPanelApp(): React.ReactElement {
             <Button type="button" variant="outline" onClick={() => setSslModalOpen(false)}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white"
-            >
+            <Button type="submit" variant="emerald">
               <Sparkles className="h-4 w-4" />
               Issue &amp; Install AutoSSL
             </Button>
@@ -871,7 +911,7 @@ export function CustomerPanelApp(): React.ReactElement {
         </form>
       </DialogModal>
 
-      {/* 5. Razorpay Checkout Modal (Preserved for Store surface) */}
+      {/* 5. Razorpay Checkout Modal */}
       <DialogModal
         open={checkoutPlan !== null}
         onClose={() => setCheckoutPlan(null)}
@@ -902,7 +942,7 @@ export function CustomerPanelApp(): React.ReactElement {
             <Button type="button" variant="outline" onClick={() => setCheckoutPlan(null)}>
               Cancel
             </Button>
-            <Button type="submit" variant="orange">
+            <Button type="submit" variant="nebulix">
               <CreditCard className="h-4 w-4" />
               Complete Razorpay Verification &amp; Issue Key
             </Button>

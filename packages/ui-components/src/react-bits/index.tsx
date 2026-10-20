@@ -29,7 +29,7 @@ export interface SpotlightCardProps extends React.HTMLAttributes<HTMLDivElement>
 export function SpotlightCard({
   children,
   className,
-  spotlightColor = 'rgba(255, 108, 44, 0.14)',
+  spotlightColor = 'rgba(99, 102, 241, 0.12)',
   ...props
 }: SpotlightCardProps) {
   const divRef = React.useRef<HTMLDivElement>(null);
@@ -49,7 +49,7 @@ export function SpotlightCard({
       onMouseEnter={() => setOpacity(1)}
       onMouseLeave={() => setOpacity(0)}
       className={cn(
-        'relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition-all duration-300 hover:border-orange-500/35 hover:shadow-md dark:border-slate-800/80 dark:bg-slate-900/90',
+        'relative overflow-hidden rounded-2xl border border-indigo-100/90 bg-white p-5 text-slate-900 shadow-[0_10px_30px_-12px_rgba(99,102,241,0.12)] transition-all duration-300 hover:border-indigo-300/80 hover:shadow-[0_18px_38px_-12px_rgba(99,102,241,0.20)]',
         className
       )}
       {...props}
@@ -293,7 +293,7 @@ export function DecryptedText({
 }
 
 /* --------------------------------------------------------------------------
-   7. AuroraBackground (React Bits)
+   7. AuroraBackground (React Bits — Nebulix Light-Theme Edition)
    -------------------------------------------------------------------------- */
 export interface AuroraBackgroundProps extends React.HTMLAttributes<HTMLDivElement> {
   colorStops?: [string, string, string];
@@ -301,26 +301,29 @@ export interface AuroraBackgroundProps extends React.HTMLAttributes<HTMLDivEleme
 }
 
 export function AuroraBackground({
-  colorStops = ['#ff6c2c', '#2563eb', '#10b981'],
+  colorStops = ['#8B5CF6', '#6366F1', '#3B82F6'],
   children,
   className,
   ...props
 }: AuroraBackgroundProps) {
   return (
     <div
-      className={cn('relative overflow-hidden rounded-2xl bg-slate-950 text-white', className)}
+      className={cn(
+        'relative overflow-hidden rounded-3xl border border-indigo-100/90 bg-gradient-to-br from-white via-[#F6F4FF] to-[#EEF4FF] text-slate-900 shadow-[0_18px_50px_-15px_rgba(99,102,241,0.16)]',
+        className
+      )}
       {...props}
     >
       <div
-        className="pointer-events-none absolute -top-28 -left-24 h-72 w-72 rounded-full opacity-30 blur-3xl transition-all duration-1000"
+        className="pointer-events-none absolute -top-28 -left-24 h-72 w-72 rounded-full opacity-20 blur-3xl transition-all duration-1000"
         style={{ background: colorStops[0] }}
       />
       <div
-        className="pointer-events-none absolute -right-20 top-8 h-72 w-72 rounded-full opacity-25 blur-3xl transition-all duration-1000"
+        className="pointer-events-none absolute -right-20 top-8 h-72 w-72 rounded-full opacity-15 blur-3xl transition-all duration-1000"
         style={{ background: colorStops[1] }}
       />
       <div
-        className="pointer-events-none absolute -bottom-24 left-1/3 h-64 w-64 rounded-full opacity-20 blur-3xl transition-all duration-1000"
+        className="pointer-events-none absolute -bottom-24 left-1/3 h-64 w-64 rounded-full opacity-15 blur-3xl transition-all duration-1000"
         style={{ background: colorStops[2] }}
       />
       <div className="relative z-10">{children}</div>
@@ -329,7 +332,7 @@ export function AuroraBackground({
 }
 
 /* --------------------------------------------------------------------------
-   8. StarBorder (React Bits)
+   8. StarBorder (React Bits — Nebulix Light-Theme Edition)
    -------------------------------------------------------------------------- */
 export interface StarBorderProps extends React.HTMLAttributes<HTMLDivElement> {
   color?: string;
@@ -337,7 +340,7 @@ export interface StarBorderProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 export function StarBorder({
-  color = '#ff6c2c',
+  color = '#6366F1',
   children,
   className,
   ...props
@@ -345,15 +348,15 @@ export function StarBorder({
   return (
     <div
       className={cn(
-        'relative rounded-2xl p-[1.5px] transition-transform duration-300',
+        'relative rounded-2xl p-[1.5px] shadow-[0_12px_34px_-12px_rgba(99,102,241,0.18)] transition-transform duration-300',
         className
       )}
       style={{
-        background: `linear-gradient(135deg, ${color}, rgba(56,189,248,0.45), ${color})`,
+        background: `linear-gradient(135deg, ${color}, rgba(59,130,246,0.45), ${color})`,
       }}
       {...props}
     >
-      <div className="h-full w-full rounded-[15px] bg-white dark:bg-slate-900">{children}</div>
+      <div className="h-full w-full rounded-[15px] bg-white text-slate-900">{children}</div>
     </div>
   );
 }
