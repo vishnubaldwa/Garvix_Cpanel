@@ -72,10 +72,10 @@ export const NebulixQuickActions: React.FC<NebulixQuickActionsProps> = ({
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-display text-lg font-extrabold tracking-tight text-slate-900">
-            Quick Actions
+            cPanel Quick Actions
           </h2>
           <p className="text-xs text-slate-500">
-            One-click shortcuts for frequent hosting management operations
+            One-click shortcuts for frequent cPanel operations
           </p>
         </div>
       </div>

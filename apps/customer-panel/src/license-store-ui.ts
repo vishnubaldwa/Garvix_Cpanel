@@ -625,23 +625,23 @@ export function renderLicenseStoreHtml(
     const PLANS = [
       {
         code: 'SOLO',
-        name: 'Garvix Solo',
-        badge: '1 Hosting Account',
-        forWho: 'Best for 1 website or personal VPS',
+        name: 'Garvix cPanel Solo',
+        badge: 'Only cPanel (1 Account)',
+        forWho: 'Only cPanel (No WHM) for 1 Server Account',
         monthly: 399,
         annual: 3990,
         features: [
-          '1 cPanel Customer Account',
-          'Unlimited Domains & Subdomains',
+          'Only cPanel Control Panel (No WHM)',
+          '1 cPanel Account (Unlimited Domains)',
           'Emails, Databases & Free Auto-SSL',
           '1-Click VPS Install Command'
         ]
       },
       {
         code: 'ADMIN',
-        name: 'Garvix Admin',
-        badge: 'Up to 5 Accounts',
-        forWho: 'Best for developers & small agencies',
+        name: 'Garvix WHM + cPanel Admin',
+        badge: 'WHM + Up to 5 cPanel',
+        forWho: 'WHM + cPanel for up to 5 accounts',
         monthly: 699,
         annual: 6990,
         features: [
@@ -653,30 +653,30 @@ export function renderLicenseStoreHtml(
       },
       {
         code: 'PRO',
-        name: 'Garvix Pro',
-        badge: 'Up to 30 Accounts',
-        forWho: 'Best for web agencies & growing businesses',
+        name: 'Garvix WHM + cPanel Pro',
+        badge: 'WHM + Up to 30 cPanel',
+        forWho: 'WHM + cPanel for agencies & businesses',
         monthly: 1099,
         annual: 10990,
         popular: true,
         features: [
           'Up to 30 Separate cPanel Accounts',
-          'Full WHM + Hosting Package Creator',
+          'Full WHM + cPanel Package Creator',
           '1-Click Login to Any Customer cPanel',
           'Priority Support & Free IP Transfer'
         ]
       },
       {
         code: 'PREMIER',
-        name: 'Garvix Premier',
-        badge: 'Unlimited Accounts',
-        forWho: 'Best for hosting companies & enterprises',
+        name: 'Garvix WHM + cPanel Premier',
+        badge: 'WHM + Unlimited cPanel',
+        forWho: 'WHM + Unlimited cPanel Accounts',
         monthly: 1499,
         annual: 14990,
         features: [
-          'Unlimited cPanel Hosting Accounts',
+          'Unlimited cPanel Accounts',
           'Full WHM Server Administration',
-          'WHM API & Cluster Automation',
+          'WHM API & Multi-Account Management',
           '72-Hour Grace Period Protection'
         ]
       }

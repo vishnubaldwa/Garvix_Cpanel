@@ -105,35 +105,35 @@ const INITIAL_DATABASES: HostedDbItem[] = [
 
 const STORE_PLANS = [
   {
-    code: 'TRIAL',
-    name: 'Garvix Trial',
-    accounts: '1 cPanel Account (15 Days)',
-    priceInr: 0,
-    badge: 'FREE 15-DAY TRIAL',
+    code: 'SOLO',
+    name: 'Garvix cPanel Solo',
+    accounts: 'Only cPanel (No WHM) · 1 cPanel Account',
+    priceInr: 399,
+    badge: 'ONLY cPANEL (1 ACCOUNT)',
     popular: false,
   },
   {
-    code: 'SOLO',
-    name: 'Garvix Solo',
-    accounts: '1 Hosting Account · Dedicated VPS',
-    priceInr: 799,
-    badge: 'SOLO VPS',
+    code: 'ADMIN',
+    name: 'Garvix WHM + cPanel Admin',
+    accounts: 'WHM + Up to 5 cPanel Accounts',
+    priceInr: 699,
+    badge: 'WHM + 5 cPANEL',
     popular: false,
   },
   {
     code: 'PRO',
-    name: 'Garvix Pro',
-    accounts: 'Up to 5 Hosting Accounts · WHM + cPanel',
-    priceInr: 1499,
-    badge: 'MOST POPULAR',
+    name: 'Garvix WHM + cPanel Pro',
+    accounts: 'WHM + Up to 30 cPanel Accounts',
+    priceInr: 1099,
+    badge: 'MOST POPULAR (WHM + cPANEL)',
     popular: true,
   },
   {
     code: 'PREMIER',
-    name: 'Garvix Premier',
-    accounts: 'Up to 100 Hosting Accounts · Cloud / Dedicated',
-    priceInr: 2999,
-    badge: 'ENTERPRISE',
+    name: 'Garvix WHM + cPanel Premier',
+    accounts: 'WHM + Unlimited cPanel Accounts',
+    priceInr: 1499,
+    badge: 'WHM + UNLIMITED cPANEL',
     popular: false,
   },
 ];
@@ -143,7 +143,7 @@ export function CustomerPanelApp(): React.ReactElement {
   const [activeSidebarItem, setActiveSidebarItem] =
     React.useState<NebulixSidebarSectionId>('dashboard');
   const [mobileSidebarOpen, setMobileSidebarOpen] = React.useState<boolean>(false);
-  const [activeRole, setActiveRole] = React.useState<GarvixRole>('HOSTING_ACCOUNT_OWNER');
+  const [activeRole] = React.useState<GarvixRole>('HOSTING_ACCOUNT_OWNER');
 
   // Existing interactive states preserved
   const [dnsRecords, setDnsRecords] = React.useState<DnsRecordItem[]>(INITIAL_DNS_RECORDS);
@@ -246,7 +246,7 @@ export function CustomerPanelApp(): React.ReactElement {
   return (
     <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-[#F7F6FD] via-[#F4F2FC] to-[#EEF2FF] text-slate-900">
       <div className="flex min-h-screen">
-        {/* SECTION A: Premium Nebulix Sidebar */}
+        {/* SECTION A: Premium Nebulix cPanel Sidebar */}
         <NebulixSidebar
           activeItem={activeSidebarItem}
           onSelectItem={(item) => {
@@ -261,7 +261,7 @@ export function CustomerPanelApp(): React.ReactElement {
 
         {/* Right Content Area */}
         <div className="flex min-w-0 flex-1 flex-col">
-          {/* Top Light-Theme SaaS Header */}
+          {/* Top Light-Theme cPanel & WHM Header */}
           <header className="sticky top-0 z-30 flex min-h-16 flex-wrap items-center justify-between gap-2 border-b border-indigo-100/80 bg-white/90 px-3 py-2.5 backdrop-blur-xl sm:px-8">
             <div className="flex items-center gap-2.5">
               <button
@@ -273,43 +273,28 @@ export function CustomerPanelApp(): React.ReactElement {
                 <Menu className="h-5 w-5" />
               </button>
               <span className="font-display text-sm font-extrabold tracking-tight text-slate-900 lg:hidden">
-                GARVIX
+                GARVIX cPanel
               </span>
 
               <div className="relative hidden sm:block">
                 <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="search"
-                  aria-label="Search domains, mailboxes, databases"
-                  placeholder="Search domains, emails, databases..."
+                  aria-label="Search cPanel tools, domains, mailboxes, databases"
+                  placeholder="Search cPanel tools, domains, emails, DBs..."
                   className="h-10 w-64 rounded-2xl border border-indigo-100/90 bg-[#F7F6FD] pl-10 pr-4 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/15 md:w-80"
                 />
               </div>
             </div>
 
             <div className="flex items-center gap-1.5 sm:gap-2.5">
-              {/* Role Selector (Preserves RBAC Verification) */}
-              <select
-                aria-label="Active RBAC Role"
-                value={activeRole}
-                onChange={(e) => setActiveRole(e.target.value as GarvixRole)}
-                className="hidden h-9 rounded-xl border border-indigo-100 bg-[#F7F6FD] px-3 text-xs font-semibold text-slate-700 xl:block"
-              >
-                <option value="HOSTING_ACCOUNT_OWNER">Role: HOSTING_ACCOUNT_OWNER</option>
-                <option value="SERVER_ADMIN">Role: SERVER_ADMIN (WHM Root)</option>
-                <option value="HOSTING_RESELLER">Role: HOSTING_RESELLER</option>
-                <option value="HOSTING_ACCOUNT_TECH">Role: HOSTING_ACCOUNT_TECH</option>
-                <option value="EMAIL_ONLY_USER">Role: EMAIL_ONLY_USER</option>
-                <option value="READ_ONLY_AUDITOR">Role: READ_ONLY_AUDITOR</option>
-              </select>
-
-              {/* Surface Switcher */}
+              {/* Surface Switcher: Only cPanel, WHM, License Store, Login */}
               <div className="flex rounded-xl border border-indigo-100 bg-[#F7F6FD] p-0.5 sm:p-1">
                 {(
                   [
-                    { id: 'cpanel', label: 'Dashboard' },
+                    { id: 'cpanel', label: 'cPanel' },
                     { id: 'whm', label: 'WHM' },
-                    { id: 'store', label: 'Store' },
+                    { id: 'store', label: 'License Store' },
                     { id: 'login', label: 'Login' },
                   ] as const
                 ).map((s) => (
@@ -317,7 +302,7 @@ export function CustomerPanelApp(): React.ReactElement {
                     key={s.id}
                     type="button"
                     onClick={() => setActiveSurface(s.id)}
-                    className={`rounded-lg px-2 py-1 text-[11px] sm:px-2.5 sm:text-xs font-bold transition-all ${
+                    className={`rounded-lg px-2.5 py-1 text-[11px] sm:px-3 sm:text-xs font-bold transition-all ${
                       activeSurface === s.id
                         ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-xs'
                         : 'text-slate-600 hover:text-indigo-900'
@@ -339,7 +324,7 @@ export function CustomerPanelApp(): React.ReactElement {
 
               <div className="hidden items-center gap-2.5 rounded-2xl border border-indigo-100 bg-white px-3 py-1.5 shadow-2xs sm:flex">
                 <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-blue-600 text-xs font-bold text-white">
-                  VB
+                  cP
                 </div>
                 <div className="hidden text-left md:block">
                   <div className="text-xs font-bold leading-none text-slate-900">Vishnu Baldwa</div>
@@ -371,7 +356,7 @@ export function CustomerPanelApp(): React.ReactElement {
           {/* Main Workspace Container */}
           <main className="mx-auto w-full max-w-[1400px] min-w-0 flex-1 space-y-8 px-4 py-6 sm:px-8 sm:py-8">
             {/* =================================================================
-                SURFACE 1: NEBULIX CUSTOMER PANEL (DASHBOARD + ALL 9 SUBMODULES)
+                SURFACE 1: GARVIX cPANEL (DASHBOARD + ALL 8 cPANEL TOOLS)
                ================================================================= */}
             {activeSurface === 'cpanel' && activeSidebarItem === 'dashboard' && (
               <div className="space-y-8">
@@ -464,10 +449,10 @@ export function CustomerPanelApp(): React.ReactElement {
                       <div className="flex items-center justify-between">
                         <div>
                           <h3 className="font-display text-sm font-bold text-slate-900">
-                            Isolated Customer Databases
+                            cPanel Databases (PostgreSQL &amp; MySQL/MariaDB)
                           </h3>
                           <p className="text-xs text-slate-500">
-                            Physically separated from `garvix_local_panel` control metadata
+                            Create and manage databases for your websites and apps
                           </p>
                         </div>
                         <button
@@ -475,7 +460,7 @@ export function CustomerPanelApp(): React.ReactElement {
                           onClick={handleCreateDatabase}
                           className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:opacity-95"
                         >
-                          <Plus className="h-3.5 w-3.5" /> Provision DB
+                          <Plus className="h-3.5 w-3.5" /> Create DB
                         </button>
                       </div>
 
@@ -521,7 +506,7 @@ export function CustomerPanelApp(): React.ReactElement {
             )}
 
             {/* =================================================================
-                SURFACE 2: WHM SERVER & RESELLER CONSOLE (NEBULIX LIGHT THEME)
+                SURFACE 2: GARVIX WHM (FOR MULTI-ACCOUNT WHM + cPANEL LICENSE USERS)
                ================================================================= */}
             {activeSurface === 'whm' && (
               <AnimatedContent className="space-y-6">
@@ -529,47 +514,109 @@ export function CustomerPanelApp(): React.ReactElement {
                   <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
                       <div className="flex items-center gap-2">
-                        <Badge variant="orange">WHM ROOT &amp; RESELLER CONSOLE</Badge>
-                        <Badge variant="success">12-Step Go Agent Pipeline Active</Badge>
+                        <Badge variant="orange">GARVIX WHM (WEBHOST MANAGER · PORT 2087)</Badge>
+                        <Badge variant="success">Multi-Account License Active</Badge>
                       </div>
                       <h1 className="mt-2 font-display text-2xl font-extrabold text-slate-900 sm:text-3xl flex items-center gap-2.5">
                         <ServerCog className="h-7 w-7 text-indigo-600" />
-                        <BlurText text="Transactional Account Provisioning & systemd Control" />
+                        <BlurText text="Create & Manage Multiple cPanel Accounts on Your Server" />
                       </h1>
                       <p className="mt-1 text-xs text-slate-600 max-w-2xl">
-                        Every privileged operation executes over `/run/garvix-agent/agent.sock` with
-                        SO_PEERCRED verification, dry-run preview, and automatic rollback on
-                        failure.
+                        Included with WHM + cPanel licenses. Create isolated cPanel accounts for
+                        your websites or clients, set disk/bandwidth packages, and 1-click launch
+                        any account’s cPanel.
                       </p>
                     </div>
                     <Button
                       onClick={() =>
-                        showToast(
-                          'Provisioned tenant account through 6-step state machine (PREFLIGHT -> ACTIVE).'
-                        )
+                        showToast('Created new isolated cPanel account on your server via WHM.')
                       }
                     >
-                      <Plus className="h-4 w-4" /> Provision Hosting Account
+                      <Plus className="h-4 w-4" /> Create New cPanel Account
                     </Button>
                   </div>
                 </AuroraBackground>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>List cPanel Accounts on Server (`whm.garvixcloud.in`)</CardTitle>
+                    <CardDescription>
+                      Click `[cP] Open cPanel` to log directly into any customer cPanel account
+                      without re-entering a password.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {[
+                      {
+                        domain: 'garvixcloud.in',
+                        user: 'garvixprod',
+                        pkg: 'Unlimited cPanel',
+                        disk: '14.2 GB / 50 GB',
+                        status: 'ACTIVE',
+                      },
+                      {
+                        domain: 'acmecorp.in',
+                        user: 'acmecorp',
+                        pkg: 'Business 25GB',
+                        disk: '6.4 GB / 25 GB',
+                        status: 'ACTIVE',
+                      },
+                      {
+                        domain: 'shopkart.co.in',
+                        user: 'shopkart',
+                        pkg: 'Starter 10GB',
+                        disk: '2.1 GB / 10 GB',
+                        status: 'ACTIVE',
+                      },
+                    ].map((acct) => (
+                      <div
+                        key={acct.user}
+                        className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-indigo-100 bg-[#FAF9FE] p-4 text-xs"
+                      >
+                        <div>
+                          <div className="font-mono text-sm font-bold text-slate-900">
+                            {acct.domain}
+                          </div>
+                          <div className="mt-0.5 text-slate-500">
+                            cPanel User: <span className="font-mono font-bold">{acct.user}</span> ·
+                            Package: {acct.pkg} · Disk: {acct.disk}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2.5">
+                          <Badge variant="success">{acct.status}</Badge>
+                          <Button
+                            size="sm"
+                            variant="nebulix"
+                            onClick={() => {
+                              setActiveSurface('cpanel');
+                              setActiveSidebarItem('dashboard');
+                              showToast(`Launched cPanel for ${acct.domain} (${acct.user}).`);
+                            }}
+                          >
+                            [cP] Open cPanel
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
 
                 <div className="grid gap-4 sm:grid-cols-3">
                   {[
                     {
                       unit: 'nginx.service',
-                      desc: 'Reverse Proxy & HTTP/3 VirtualHosts',
+                      desc: 'Web Server & VirtualHosts',
                       state: 'ACTIVE (running)',
                     },
                     {
                       unit: 'php83-php-fpm.service',
-                      desc: 'Per-Tenant UID/GID FPM Pools',
+                      desc: 'Per-cPanel Account PHP-FPM Pools',
                       state: 'ACTIVE (running)',
                     },
                     {
-                      unit: 'garvix-agent.service',
-                      desc: 'Go 1.22 Privileged IPC Daemon',
-                      state: 'ACTIVE (enforcing)',
+                      unit: 'postfix + dovecot',
+                      desc: 'Mail Server & Webmail Services',
+                      state: 'ACTIVE (running)',
                     },
                   ].map((svc) => (
                     <SpotlightCard key={svc.unit} className="space-y-2">
@@ -586,55 +633,29 @@ export function CustomerPanelApp(): React.ReactElement {
                     </SpotlightCard>
                   ))}
                 </div>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>6-Stage Transactional Provisioning State Machine</CardTitle>
-                    <CardDescription>
-                      Automatic snapshot rollback (`FAILED_ROLLED_BACK`) if any step or `nginx -t` /
-                      `named-checkzone` validation fails.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
-                      {[
-                        'PREFLIGHT',
-                        'PROVISIONING_LINUX_USER',
-                        'PROVISIONING_HOME_FS',
-                        'PROVISIONING_WEB_VHOST',
-                        'PROVISIONING_DNS',
-                        'ACTIVE',
-                      ].map((step) => (
-                        <Badge key={step} variant={step === 'ACTIVE' ? 'success' : 'default'}>
-                          {step}
-                        </Badge>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
               </AnimatedContent>
             )}
 
             {/* =================================================================
-                SURFACE 3: RAZORPAY COMMERCIAL LICENSE STORE (NEBULIX LIGHT THEME)
+                SURFACE 3: BUY cPANEL OR WHM + cPANEL LICENSE STORE
                ================================================================= */}
             {activeSurface === 'store' && (
               <AnimatedContent className="space-y-6">
                 <AuroraBackground className="p-6 sm:p-8">
                   <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <Badge variant="orange">RAZORPAY CHECKOUT + INSTANT ED25519 LICENSE</Badge>
+                      <Badge variant="orange">BUY cPANEL OR WHM + cPANEL LICENSE</Badge>
                       <h2 className="mt-2 font-display text-2xl font-extrabold text-slate-900 sm:text-3xl">
-                        <BlurText text="Garvix Commercial License Store (SAC 998315 · 18% GST)" />
+                        <BlurText text="Choose Only cPanel (1 Account) or WHM + cPanel License" />
                       </h2>
                       <p className="mt-1 text-xs text-slate-600 max-w-2xl">
-                        Pay via UPI QR, Credit Card, Debit Card, or NetBanking. Automatically
-                        creates your Customer Portal account and binds an Ed25519 license key to
-                        your server IP.
+                        Install Garvix on your own VPS or Dedicated Server. Pay via Razorpay (UPI
+                        QR, Credit/Debit Card, NetBanking) and get your instant license key + 1-line
+                        SSH install command.
                       </p>
                     </div>
                     <div className="rounded-2xl border border-indigo-100 bg-white px-5 py-3.5 text-xs shadow-sm">
-                      <div className="font-semibold text-slate-500">Latest Issued License Key:</div>
+                      <div className="font-semibold text-slate-500">Your Issued License Key:</div>
                       <div className="mt-1 font-mono text-sm font-extrabold text-indigo-700">
                         <DecryptedText text={issuedStoreKey} />
                       </div>
@@ -655,15 +676,15 @@ export function CustomerPanelApp(): React.ReactElement {
                               {plan.name}
                             </h3>
                             <div className="mt-2 font-display text-3xl font-extrabold text-slate-900">
-                              {plan.priceInr === 0 ? 'Free' : `₹${plan.priceInr}`}
-                              {plan.priceInr > 0 && (
-                                <span className="text-xs font-medium text-slate-500">
-                                  {' '}
-                                  / month (incl. GST)
-                                </span>
-                              )}
+                              ₹{plan.priceInr}
+                              <span className="text-xs font-medium text-slate-500">
+                                {' '}
+                                / month (+18% GST)
+                              </span>
                             </div>
-                            <p className="mt-2 text-xs text-slate-600">{plan.accounts}</p>
+                            <p className="mt-2 text-xs font-semibold text-indigo-700">
+                              {plan.accounts}
+                            </p>
                           </div>
 
                           <Button
@@ -672,7 +693,7 @@ export function CustomerPanelApp(): React.ReactElement {
                             onClick={() => setCheckoutPlan(plan)}
                           >
                             <CreditCard className="h-4 w-4" />
-                            {plan.priceInr === 0 ? 'Activate Free Trial' : 'Buy with Razorpay'}
+                            Buy License via Razorpay
                           </Button>
                         </div>
                       </StarBorder>
@@ -683,7 +704,7 @@ export function CustomerPanelApp(): React.ReactElement {
             )}
 
             {/* =================================================================
-                SURFACE 4: CUSTOMER vs ADMIN LOGIN PORTAL (NEBULIX LIGHT THEME)
+                SURFACE 4: cPANEL vs WHM LOGIN PORTAL (NEBULIX LIGHT THEME)
                ================================================================= */}
             {activeSurface === 'login' && (
               <AnimatedContent>
@@ -695,7 +716,7 @@ export function CustomerPanelApp(): React.ReactElement {
                       onClick={() => setLoginMode('CUSTOMER')}
                     >
                       <UserCheck className="h-4 w-4" />
-                      Customer Portal Login
+                      cPanel Login (Port 2083)
                     </Button>
                     <Button
                       variant={loginMode === 'ADMIN' ? 'blue' : 'outline'}
@@ -703,29 +724,31 @@ export function CustomerPanelApp(): React.ReactElement {
                       onClick={() => setLoginMode('ADMIN')}
                     >
                       <KeyRound className="h-4 w-4" />
-                      Super Admin Login
+                      WHM Login (Port 2087)
                     </Button>
                   </div>
 
                   <div className="mt-5">
                     <h2 className="font-display text-xl font-extrabold text-slate-900">
                       {loginMode === 'CUSTOMER'
-                        ? 'Customer License & Billing Portal'
-                        : 'Garvix Super Admin Portal'}
+                        ? 'GARVIX cPanel Login'
+                        : 'GARVIX WHM (WebHost Manager) Login'}
                     </h2>
                     <p className="mt-1 text-xs text-slate-600">
                       {loginMode === 'CUSTOMER'
-                        ? 'View only your own purchased Ed25519 licenses, rebind server IPs, and download GST invoices.'
-                        : 'Restricted to Garvix Super Administrators with hardware MFA / TOTP verification.'}
+                        ? 'Sign in to your cPanel account to manage domains, emails, databases, files, and SSL.'
+                        : 'Sign in to WHM to create and manage multiple cPanel accounts on your server.'}
                     </p>
                   </div>
 
                   <div className="mt-5 space-y-4">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Email Address</label>
+                      <label className="text-xs font-bold text-slate-700">
+                        {loginMode === 'CUSTOMER' ? 'cPanel Username or Email' : 'WHM Root / Reseller Username'}
+                      </label>
                       <Input
                         defaultValue={
-                          loginMode === 'CUSTOMER' ? 'customer@company.in' : 'admin@garvix.com'
+                          loginMode === 'CUSTOMER' ? 'garvixprod' : 'root'
                         }
                       />
                     </div>
@@ -737,16 +760,16 @@ export function CustomerPanelApp(): React.ReactElement {
                       variant="nebulix"
                       className="w-full"
                       onClick={() => {
-                        setActiveSurface('cpanel');
+                        setActiveSurface(loginMode === 'CUSTOMER' ? 'cpanel' : 'whm');
                         showToast(
-                          `Authenticated into ${
-                            loginMode === 'CUSTOMER' ? 'Customer Portal' : 'Admin Console'
+                          `Signed in to ${
+                            loginMode === 'CUSTOMER' ? 'GARVIX cPanel' : 'GARVIX WHM'
                           }.`
                         );
                       }}
                     >
                       <Lock className="h-4 w-4" />
-                      Sign In to {loginMode === 'CUSTOMER' ? 'Customer Portal' : 'Admin Console'}
+                      Sign In to {loginMode === 'CUSTOMER' ? 'cPanel' : 'WHM'}
                     </Button>
                   </div>
                 </AuroraBackground>

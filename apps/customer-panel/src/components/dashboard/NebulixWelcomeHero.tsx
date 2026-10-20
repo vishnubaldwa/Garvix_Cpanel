@@ -27,28 +27,28 @@ export const NebulixWelcomeHero: React.FC<NebulixWelcomeHeroProps> = ({
         <div className="min-w-0 space-y-5">
           <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-indigo-200/80 bg-white/90 px-3.5 py-1.5 text-xs font-semibold text-indigo-700 shadow-xs">
             <Sparkles className="h-3.5 w-3.5 text-violet-600" />
-            <span>Nebulix Cloud Engine</span>
+            <span>GARVIX cPanel v1.0</span>
             <span className="text-slate-300">•</span>
             <GradientText
               colors={['#7C3AED', '#4F46E5', '#2563EB', '#7C3AED']}
               className="text-xs font-bold"
             >
-              AlmaLinux 10 NVMe Cluster
+              Web &amp; Domain Control Panel
             </GradientText>
           </div>
 
           <div className="space-y-2.5">
             <h1 className="font-display text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl lg:text-[34px] lg:leading-[1.18]">
               <BlurText
-                text="Welcome back, Vishnu! Your Cloud Hosting is Running Smoothly."
+                text="Welcome back, Vishnu! Your GARVIX cPanel is Ready."
                 delayMs={35}
               />
             </h1>
             <p className="max-w-2xl text-sm leading-relaxed text-slate-600">
-              Your primary production workspace{' '}
-              <span className="font-mono font-semibold text-indigo-700">garvixcloud.in</span> is
-              protected by AutoSSL TLS 1.3, isolated PHP-FPM 8.3 &amp; Node.js 20 pools, and daily
-              Restic AES-256-GCM snapshots.
+              Manage your domains, DNS zones, business emails, databases, files, and AutoSSL TLS 1.3
+              certificates for{' '}
+              <span className="font-mono font-semibold text-indigo-700">garvixcloud.in</span>{' '}
+              directly from your cPanel workspace.
             </p>
           </div>
 
@@ -56,11 +56,11 @@ export const NebulixWelcomeHero: React.FC<NebulixWelcomeHeroProps> = ({
           <div className="flex flex-wrap items-center gap-3 text-xs font-medium text-slate-600">
             <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200/80 bg-emerald-50/80 px-3 py-1 text-emerald-800">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-              99.98% Uptime SLA
+              cPanel Services Active
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200/70 bg-white/80 px-3 py-1 text-indigo-900">
               <ShieldCheck className="h-3.5 w-3.5 text-indigo-600" />
-              13/13 Mail Preflight Verified
+              AutoSSL &amp; DKIM Enabled
             </span>
           </div>
 

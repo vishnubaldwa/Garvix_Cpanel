@@ -105,10 +105,10 @@ export const NebulixStatsGrid: React.FC<NebulixStatsGridProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="font-display text-lg font-extrabold tracking-tight text-slate-900">
-            Hosting Resource Overview
+            cPanel Account Overview
           </h2>
           <p className="text-xs text-slate-500">
-            Real-time quota allocation and active services for tenant{' '}
+            Active domains, email mailboxes, databases, and server disk usage for{' '}
             <span className="font-mono font-semibold text-indigo-700">garvixprod</span>
           </p>
         </div>
@@ -118,7 +118,7 @@ export const NebulixStatsGrid: React.FC<NebulixStatsGridProps> = ({
           className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200/80 bg-indigo-50/90 px-3 py-1 text-[11px] font-bold text-indigo-700"
         >
           <Info className="h-3.5 w-3.5 text-indigo-600" />
-          <span>Preview / Mock Account Metrics</span>
+          <span>cPanel Account Metrics</span>
         </span>
       </div>
 

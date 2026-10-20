@@ -8,7 +8,6 @@ import {
   ShieldCheck,
   CloudDownload,
   Lock,
-  CreditCard,
   Sliders,
   Sparkles,
   ChevronRight,
@@ -26,7 +25,6 @@ export type NebulixSidebarSectionId =
   | 'ssl-certificates'
   | 'backups'
   | 'security'
-  | 'billing'
   | 'settings';
 
 export interface NebulixNavEntry {
@@ -37,23 +35,22 @@ export interface NebulixNavEntry {
 }
 
 export const NEBULIX_SIDEBAR_ITEMS: readonly NebulixNavEntry[] = [
-  { id: 'dashboard', label: 'Dashboard', badge: 'Home', icon: LayoutDashboard },
-  { id: 'websites-domains', label: 'Websites & Domains', badge: '5', icon: Globe },
+  { id: 'dashboard', label: 'Dashboard', badge: 'cPanel', icon: LayoutDashboard },
+  { id: 'websites-domains', label: 'Domains & DNS', badge: '5', icon: Globe },
   { id: 'email-accounts', label: 'Email Accounts', badge: '18', icon: Mail },
   { id: 'databases', label: 'Databases', badge: 'PG/MySQL', icon: Database },
   { id: 'file-manager', label: 'File Manager', icon: FolderOpen },
-  { id: 'ssl-certificates', label: 'SSL Certificates', badge: 'TLS 1.3', icon: ShieldCheck },
+  { id: 'ssl-certificates', label: 'SSL Certificates', badge: 'AutoSSL', icon: ShieldCheck },
   { id: 'backups', label: 'Backups', badge: 'Daily', icon: CloudDownload },
   { id: 'security', label: 'Security', icon: Lock },
-  { id: 'billing', label: 'Billing', icon: CreditCard },
   { id: 'settings', label: 'Settings', icon: Sliders },
 ];
 
 export interface NebulixSidebarProps {
   activeItem: NebulixSidebarSectionId;
   onSelectItem: (item: NebulixSidebarSectionId) => void;
-  activeRole: GarvixRole;
-  authorizedNavItems: NavigationItem[];
+  activeRole?: GarvixRole;
+  authorizedNavItems?: NavigationItem[];
   mobileOpen: boolean;
   onCloseMobile: () => void;
 }
@@ -61,19 +58,17 @@ export interface NebulixSidebarProps {
 export const NebulixSidebar: React.FC<NebulixSidebarProps> = ({
   activeItem,
   onSelectItem,
-  activeRole,
-  authorizedNavItems,
   mobileOpen,
   onCloseMobile,
 }) => {
   const sidebarContent = (
     <div className="flex h-full flex-col justify-between bg-white/95 px-4 py-6 backdrop-blur-xl">
       <div>
-        {/* GARVIX Brand Logo Header */}
+        {/* GARVIX cPanel Brand Logo Header */}
         <div className="flex items-center justify-between px-2 pb-6">
           <div className="flex items-center gap-3">
             <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 via-indigo-600 to-blue-600 text-white shadow-[0_8px_22px_-4px_rgba(99,102,241,0.55)]">
-              <span className="font-display text-lg font-extrabold tracking-tight">G</span>
+              <span className="font-display text-lg font-extrabold tracking-tight">cP</span>
               <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />
             </div>
             <div>
@@ -82,10 +77,10 @@ export const NebulixSidebar: React.FC<NebulixSidebarProps> = ({
                   GARVIX
                 </span>
                 <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-600 border border-indigo-200/60">
-                  Cloud
+                  cPanel
                 </span>
               </div>
-              <p className="text-[11px] font-medium text-slate-500">Nebulix Hosting Suite</p>
+              <p className="text-[11px] font-medium text-slate-500">Web Control Panel</p>
             </div>
           </div>
 
@@ -103,7 +98,7 @@ export const NebulixSidebar: React.FC<NebulixSidebarProps> = ({
         <div className="mb-5 rounded-2xl border border-indigo-100 bg-gradient-to-r from-[#F5F3FF] via-[#EEF2FF] to-[#EFF6FF] p-3">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600">
-              Primary Workspace
+              cPanel Account
             </span>
             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Active
@@ -113,14 +108,14 @@ export const NebulixSidebar: React.FC<NebulixSidebarProps> = ({
             garvixcloud.in
           </div>
           <div className="mt-0.5 text-[11px] text-slate-500">
-            AlmaLinux 10 · UID 1004 (`garvixprod`)
+            User: `garvixprod` · Port 2083 (SSL)
           </div>
         </div>
 
         {/* Navigation Links */}
         <div className="space-y-1">
           <div className="px-3 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-            Hosting Control
+            cPanel Tools
           </div>
           <nav aria-label="Customer Panel Navigation" className="space-y-1">
             {NEBULIX_SIDEBAR_ITEMS.map((item) => {
@@ -180,16 +175,15 @@ export const NebulixSidebar: React.FC<NebulixSidebarProps> = ({
         </div>
       </div>
 
-      {/* Bottom RBAC Scope & Pro Plan Card */}
+      {/* Bottom License Status Card */}
       <div className="mt-6 space-y-3">
         <div className="rounded-2xl border border-indigo-100/90 bg-gradient-to-br from-violet-50/90 via-indigo-50/60 to-blue-50/90 p-3.5 shadow-sm">
           <div className="flex items-center gap-2 text-xs font-bold text-indigo-950">
             <Sparkles className="h-4 w-4 text-indigo-600" />
-            <span>Garvix Pro NVMe Plan</span>
+            <span>GARVIX cPanel License</span>
           </div>
           <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
-            RBAC Role: <span className="font-mono font-semibold text-indigo-700">{activeRole}</span>{' '}
-            ({authorizedNavItems.length} authorized policies active)
+            Self-Hosted Server Panel · <span className="font-semibold text-indigo-700">Verified</span>
           </p>
         </div>
       </div>

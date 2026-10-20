@@ -16,7 +16,7 @@ export { NebulixModulePages } from './components/dashboard/NebulixModulePages.js
  * Hosting Account Owner, Hosting Account Technician, Email-Only User, and Read-Only Auditor.
  */
 export const CUSTOMER_PANEL_APP_METADATA = {
-  appName: 'Garvix Customer Hosting Panel',
+  appName: 'Garvix cPanel',
   version: '1.0.0-rc1',
   getNavigationForRole: getAuthorizedNavigationForRole,
 };

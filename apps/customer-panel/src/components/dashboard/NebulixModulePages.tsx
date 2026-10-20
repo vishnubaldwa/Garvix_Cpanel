@@ -7,11 +7,9 @@ import {
   ShieldCheck,
   CloudDownload,
   Lock,
-  CreditCard,
   Sliders,
   Plus,
   CheckCircle2,
-  FileText,
   KeyRound,
   RefreshCw,
   Terminal,
@@ -554,76 +552,12 @@ export const NebulixModulePages: React.FC<NebulixModulePageProps> = ({
   }
 
   /* ------------------------------------------------------------------------
-     8. BILLING
-     ------------------------------------------------------------------------ */
-  if (section === 'billing') {
-    return (
-      <AnimatedContent className="space-y-6">
-        <AuroraBackground className="p-6 sm:p-8">
-          <Badge variant="orange">MODULE 11 · SUBSCRIPTIONS &amp; SAC 998315 GST INVOICES</Badge>
-          <h1 className="mt-2 font-display text-2xl font-extrabold text-slate-900 sm:text-3xl">
-            <BlurText text="Commercial Subscription & Indian GST Tax Ledger" />
-          </h1>
-          <p className="mt-1 text-xs text-slate-600">
-            Razorpay Verified Payments · SAC 998315 Cloud Hosting &amp; IT Infrastructure (18% GST).
-          </p>
-        </AuroraBackground>
-
-        <div className="rounded-2xl border border-indigo-100/90 bg-white p-6 shadow-[0_10px_30px_-12px_rgba(99,102,241,0.12)] space-y-3">
-          {[
-            {
-              inv: 'GVX-INV-2026-1041',
-              plan: 'Garvix Pro (Up to 5 Accounts)',
-              tax: 'CGST ₹114.33 + SGST ₹114.33',
-              total: '₹1,499.00',
-              payId: 'pay_P9xK4m2n8LqR1w',
-            },
-            {
-              inv: 'GVX-INV-2026-0988',
-              plan: 'Garvix Pro (Up to 5 Accounts)',
-              tax: 'CGST ₹114.33 + SGST ₹114.33',
-              total: '₹1,499.00',
-              payId: 'pay_P8mW2c1x4QpZ9k',
-            },
-          ].map((row) => (
-            <div
-              key={row.inv}
-              className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-indigo-50 bg-[#FAF9FE] p-4 text-xs"
-            >
-              <div>
-                <div className="font-mono font-bold text-indigo-700">{row.inv}</div>
-                <div className="font-semibold text-slate-900">{row.plan}</div>
-                <div className="text-slate-500">
-                  SAC 998315 · {row.tax} · Razorpay: {row.payId}
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="font-display text-base font-extrabold text-slate-900">
-                  {row.total}
-                </span>
-                <Badge variant="success">PAID</Badge>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onShowToast(`Downloaded GST Invoice ${row.inv}.pdf`)}
-                >
-                  <FileText className="h-3.5 w-3.5" /> PDF
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </AnimatedContent>
-    );
-  }
-
-  /* ------------------------------------------------------------------------
-     9. SETTINGS
+     8. SETTINGS
      ------------------------------------------------------------------------ */
   return (
     <AnimatedContent className="space-y-6">
       <AuroraBackground className="p-6 sm:p-8">
-        <Badge variant="orange">WORKSPACE &amp; RUNTIME PREFERENCES</Badge>
+        <Badge variant="orange">cPANEL WORKSPACE &amp; RUNTIME PREFERENCES</Badge>
         <h1 className="mt-2 font-display text-2xl font-extrabold text-slate-900 sm:text-3xl">
           <BlurText text="Account Runtime & Notification Settings" />
         </h1>
