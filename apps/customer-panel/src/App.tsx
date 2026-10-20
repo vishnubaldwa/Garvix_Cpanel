@@ -49,11 +49,186 @@ import {
   NebulixWhmWorkspace,
   type NebulixWhmSectionId,
   type WhmCpanelAccountItem,
-  type WhmHostingPackageItem,
   type WhmServiceDaemonItem,
 } from './components/dashboard/NebulixWhmWorkspace.js';
 
 type PanelSurface = 'cpanel' | 'whm' | 'store' | 'login';
+
+interface GlobalSearchEntry {
+  id: string;
+  title: string;
+  subtitle: string;
+  badge: string;
+  keywords: string[];
+  surface: PanelSurface;
+  cpanelSection?: NebulixSidebarSectionId;
+  whmSection?: NebulixWhmSectionId;
+}
+
+const GLOBAL_SEARCH_CATALOG: GlobalSearchEntry[] = [
+  {
+    id: 'srch-cpanel-terminal',
+    title: 'Web Terminal (cPanel CLI Shell)',
+    subtitle: 'Interactive sandboxed bash terminal (ls, php -v, node -v, git status, df -h)',
+    badge: 'cPanel · CLI',
+    keywords: ['terminal', 'ssh', 'cli', 'bash', 'shell', 'command', 'console', 'pty'],
+    surface: 'cpanel',
+    cpanelSection: 'web-terminal',
+  },
+  {
+    id: 'srch-cpanel-api',
+    title: 'API Tokens, Cron Jobs, MultiPHP & Git Deploy',
+    subtitle: 'Generate cPanel REST API tokens, schedule Cron jobs, edit php.ini & Git pull',
+    badge: 'cPanel · API',
+    keywords: [
+      'api',
+      'token',
+      'developer',
+      'webhook',
+      'uapi',
+      'rest',
+      'cron',
+      'schedule',
+      'php',
+      'multiphp',
+      'ini',
+      'git',
+      'node',
+    ],
+    surface: 'cpanel',
+    cpanelSection: 'api-developer',
+  },
+  {
+    id: 'srch-whm-terminal-api',
+    title: 'WHM Root Terminal & WHM API Tokens (Port 2087)',
+    subtitle: 'Root server CLI shell & WHM API token generator for WHMCS / billing automation',
+    badge: 'WHM · Root API',
+    keywords: ['api', 'terminal', 'whm api', 'root', 'whmcs', '2087', 'token', 'ssh', 'cli'],
+    surface: 'whm',
+    whmSection: 'whm-terminal-api',
+  },
+  {
+    id: 'srch-cpanel-files',
+    title: 'File Manager & 4-Layer Antivirus Upload Scanner',
+    subtitle: '2-pane cPanel File Manager, Code Editor, chmod Permissions & ClamAV/YARA scanner',
+    badge: 'cPanel · Files',
+    keywords: [
+      'file',
+      'manager',
+      'upload',
+      'virus',
+      'malware',
+      'clamav',
+      'chmod',
+      'permissions',
+      'zip',
+      'extract',
+      'public_html',
+    ],
+    surface: 'cpanel',
+    cpanelSection: 'file-manager',
+  },
+  {
+    id: 'srch-cpanel-db',
+    title: 'Databases, SQL Studio & phpMyAdmin Explorer',
+    subtitle: 'PostgreSQL 16 & MariaDB 10.11, Table Browser, SQL Query Runner & .sql Import/Export',
+    badge: 'cPanel · SQL',
+    keywords: [
+      'sql',
+      'database',
+      'phpmyadmin',
+      'mysql',
+      'mariadb',
+      'postgres',
+      'postgresql',
+      'table',
+      'query',
+    ],
+    surface: 'cpanel',
+    cpanelSection: 'databases',
+  },
+  {
+    id: 'srch-cpanel-email',
+    title: 'Email Accounts, Password, Quota & Roundcube Webmail',
+    subtitle: 'Create mailboxes with Argon2id password, storage quota, IMAP/SMTP & Webmail',
+    badge: 'cPanel · Email',
+    keywords: ['email', 'mail', 'webmail', 'roundcube', 'imap', 'smtp', 'dkim', 'spf', 'dmarc'],
+    surface: 'cpanel',
+    cpanelSection: 'email-accounts',
+  },
+  {
+    id: 'srch-cpanel-domains',
+    title: 'Websites, Domains & Bind9 DNS Zone Editor',
+    subtitle: 'Manage domains, subdomains, redirects & A/AAAA/CNAME/MX/TXT DNS records',
+    badge: 'cPanel · DNS',
+    keywords: ['domain', 'dns', 'website', 'zone', 'subdomain', 'nameserver', 'mx', 'cname'],
+    surface: 'cpanel',
+    cpanelSection: 'websites-domains',
+  },
+  {
+    id: 'srch-cpanel-ssl',
+    title: 'SSL/TLS 1.3 Certificates & AutoSSL',
+    subtitle: 'Zero-downtime Let’s Encrypt HTTP-01 & DNS-01 wildcard certificates',
+    badge: 'cPanel · SSL',
+    keywords: ['ssl', 'tls', 'https', 'certificate', 'autossl', 'letsencrypt'],
+    surface: 'cpanel',
+    cpanelSection: 'ssl-certificates',
+  },
+  {
+    id: 'srch-cpanel-backups',
+    title: 'Restic Encrypted Backups & 1-Click Restore',
+    subtitle: 'AES-256-GCM snapshots with automated sandbox restore verification',
+    badge: 'cPanel · Backup',
+    keywords: ['backup', 'restore', 'snapshot', 'restic', 'recovery'],
+    surface: 'cpanel',
+    cpanelSection: 'backups',
+  },
+  {
+    id: 'srch-cpanel-security',
+    title: 'cPanel Security, ModSecurity WAF & SSH Keys',
+    subtitle: '2FA passkeys, IP blocker, SSH key authorization & brute-force shield',
+    badge: 'cPanel · Security',
+    keywords: ['security', 'waf', 'firewall', '2fa', 'passkey', 'ssh key'],
+    surface: 'cpanel',
+    cpanelSection: 'security',
+  },
+  {
+    id: 'srch-whm-accounts',
+    title: 'WHM: List cPanel Accounts, [cP] SSO & Reset Password',
+    subtitle: 'View all cPanel accounts, 1-click Open cPanel, Reset Password, Suspend/Terminate',
+    badge: 'WHM · Accounts',
+    keywords: ['whm', 'accounts', 'cpanel', 'password', 'reset', 'suspend', 'terminate', 'sso'],
+    surface: 'whm',
+    whmSection: 'whm-list-accounts',
+  },
+  {
+    id: 'srch-whm-create',
+    title: 'WHM: Create a New Isolated cPanel Account',
+    subtitle: 'Provision a new Linux UID user (/home/username), Nginx vhost & cPanel login',
+    badge: 'WHM · Provision',
+    keywords: ['create account', 'new cpanel', 'provision', 'whm create'],
+    surface: 'whm',
+    whmSection: 'whm-create-account',
+  },
+  {
+    id: 'srch-whm-firewall',
+    title: 'WHM: Firewall IP Unblock & Full Server Malware Scanner',
+    subtitle: 'Unblock Fail2Ban IPs, whitelist admin IPs & scan /home/* with ClamAV + YARA',
+    badge: 'WHM · Firewall',
+    keywords: ['firewall', 'unblock', 'ip', 'fail2ban', 'antivirus', 'malware', 'clamav', 'scan'],
+    surface: 'whm',
+    whmSection: 'whm-multiphp-security',
+  },
+  {
+    id: 'srch-whm-services',
+    title: 'WHM: Server Service Manager (Restart Daemons)',
+    subtitle: 'Restart Nginx, PHP-FPM, PostgreSQL 16, MariaDB, Postfix/Dovecot & Bind9',
+    badge: 'WHM · Daemons',
+    keywords: ['service', 'restart', 'nginx', 'php-fpm', 'daemon', 'systemd'],
+    surface: 'whm',
+    whmSection: 'whm-services',
+  },
+];
 
 interface DnsRecordItem {
   id: string;
@@ -114,9 +289,7 @@ const INITIAL_WHM_ACCOUNTS: WhmCpanelAccountItem[] = [
     domain: 'garvixcloud.in',
     username: 'garvixprod',
     email: 'vishnu@garvixcloud.in',
-    packageName: 'Agency Unlimited',
     diskUsedGb: 14.2,
-    diskQuotaGb: 50,
     emailAccounts: 18,
     databases: 2,
     status: 'ACTIVE',
@@ -127,9 +300,7 @@ const INITIAL_WHM_ACCOUNTS: WhmCpanelAccountItem[] = [
     domain: 'acmecorp.in',
     username: 'acmecorp',
     email: 'admin@acmecorp.in',
-    packageName: 'Business 25GB',
     diskUsedGb: 6.4,
-    diskQuotaGb: 25,
     emailAccounts: 8,
     databases: 3,
     status: 'ACTIVE',
@@ -140,43 +311,11 @@ const INITIAL_WHM_ACCOUNTS: WhmCpanelAccountItem[] = [
     domain: 'shopkart.co.in',
     username: 'shopkart',
     email: 'tech@shopkart.co.in',
-    packageName: 'Starter 10GB',
     diskUsedGb: 2.1,
-    diskQuotaGb: 10,
     emailAccounts: 4,
     databases: 1,
     status: 'ACTIVE',
     createdAt: '2026-07-19',
-  },
-];
-
-const INITIAL_WHM_PACKAGES: WhmHostingPackageItem[] = [
-  {
-    id: 'pkg-1',
-    name: 'Starter 10GB',
-    diskQuotaGb: 10,
-    bandwidthGb: 100,
-    maxEmails: 10,
-    maxDatabases: 3,
-    maxDomains: 3,
-  },
-  {
-    id: 'pkg-2',
-    name: 'Business 25GB',
-    diskQuotaGb: 25,
-    bandwidthGb: 500,
-    maxEmails: 50,
-    maxDatabases: 10,
-    maxDomains: 10,
-  },
-  {
-    id: 'pkg-3',
-    name: 'Agency Unlimited',
-    diskQuotaGb: 50,
-    bandwidthGb: 2000,
-    maxEmails: 200,
-    maxDatabases: 50,
-    maxDomains: 50,
   },
 ];
 
@@ -294,10 +433,36 @@ export function CustomerPanelApp(): React.ReactElement {
   // WHM multi-account & server states
   const [whmAccounts, setWhmAccounts] =
     React.useState<WhmCpanelAccountItem[]>(INITIAL_WHM_ACCOUNTS);
-  const [whmPackages, setWhmPackages] =
-    React.useState<WhmHostingPackageItem[]>(INITIAL_WHM_PACKAGES);
   const [whmServices, setWhmServices] =
     React.useState<WhmServiceDaemonItem[]>(INITIAL_WHM_SERVICES);
+
+  // Live Global Search Bar state
+  const [searchQuery, setSearchQuery] = React.useState<string>('');
+  const [searchOpen, setSearchOpen] = React.useState<boolean>(false);
+
+  const matchedSearchResults = React.useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    return GLOBAL_SEARCH_CATALOG.filter(
+      (entry) =>
+        entry.title.toLowerCase().includes(q) ||
+        entry.subtitle.toLowerCase().includes(q) ||
+        entry.keywords.some((kw) => kw.includes(q) || q.includes(kw))
+    );
+  }, [searchQuery]);
+
+  const handleSelectSearchResult = (entry: GlobalSearchEntry) => {
+    setActiveSurface(entry.surface);
+    if (entry.surface === 'cpanel' && entry.cpanelSection) {
+      setActiveSidebarItem(entry.cpanelSection);
+    }
+    if (entry.surface === 'whm' && entry.whmSection) {
+      setActiveWhmSection(entry.whmSection);
+    }
+    setSearchOpen(false);
+    setSearchQuery('');
+    showToast(`Opened ${entry.title}`);
+  };
 
   // Existing interactive states preserved
   const [dnsRecords, setDnsRecords] = React.useState<DnsRecordItem[]>(INITIAL_DNS_RECORDS);
@@ -450,17 +615,13 @@ export function CustomerPanelApp(): React.ReactElement {
     domain: string;
     username: string;
     email: string;
-    packageName: string;
   }) => {
-    const pkg = whmPackages.find((p) => p.name === payload.packageName);
     const newAcct: WhmCpanelAccountItem = {
       id: `acct-${Date.now()}`,
       domain: payload.domain,
       username: payload.username,
       email: payload.email,
-      packageName: payload.packageName,
       diskUsedGb: 0.2,
-      diskQuotaGb: pkg?.diskQuotaGb ?? 25,
       emailAccounts: 1,
       databases: 0,
       status: 'ACTIVE',
@@ -500,17 +661,6 @@ export function CustomerPanelApp(): React.ReactElement {
     showToast(
       `WHM Single Sign-On: Opened cPanel for ${acct.domain} (User: ${acct.username}).`
     );
-  };
-
-  const handleWhmCreatePackage = (pkg: Omit<WhmHostingPackageItem, 'id'>) => {
-    setWhmPackages((prev) => [
-      ...prev,
-      {
-        ...pkg,
-        id: `pkg-${Date.now()}`,
-      },
-    ]);
-    showToast(`WHM: Created resource package "${pkg.name}" (${pkg.diskQuotaGb} GB Disk).`);
   };
 
   const handleWhmRestartService = (serviceId: string) => {
@@ -578,18 +728,74 @@ export function CustomerPanelApp(): React.ReactElement {
                 {activeSurface === 'whm' ? 'GARVIX WHM' : 'GARVIX cPanel'}
               </span>
 
-              <div className="relative hidden sm:block">
+              <div className="relative">
                 <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="search"
+                  value={searchQuery}
+                  onFocus={() => setSearchOpen(true)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setSearchOpen(true);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && matchedSearchResults.length > 0) {
+                      e.preventDefault();
+                      handleSelectSearchResult(matchedSearchResults[0]!);
+                    } else if (e.key === 'Escape') {
+                      setSearchOpen(false);
+                    }
+                  }}
                   aria-label="Search cPanel or WHM tools"
-                  placeholder={
-                    activeSurface === 'whm'
-                      ? 'Search WHM accounts, packages, services...'
-                      : 'Search cPanel tools, domains, emails, DBs...'
-                  }
-                  className="h-10 w-64 rounded-2xl border border-indigo-100/90 bg-[#F7F6FD] pl-10 pr-4 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/15 md:w-80"
+                  placeholder="Search api, terminal, cron, php, sql, file, email, whm..."
+                  className="h-10 w-52 rounded-2xl border border-indigo-100/90 bg-[#F7F6FD] pl-10 pr-4 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/15 sm:w-72 md:w-96"
                 />
+
+                {searchOpen && searchQuery.trim().length > 0 && (
+                  <div className="absolute left-0 top-12 z-50 w-80 max-w-[92vw] overflow-hidden rounded-2xl border border-indigo-100 bg-white shadow-2xl sm:w-[430px]">
+                    <div className="flex items-center justify-between border-b border-slate-100 bg-[#FAF9FE] px-3.5 py-2 text-[11px] font-bold uppercase tracking-wider text-indigo-700">
+                      <span>Search Results ({matchedSearchResults.length})</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchOpen(false);
+                          setSearchQuery('');
+                        }}
+                        className="text-slate-400 hover:text-slate-700"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    {matchedSearchResults.length === 0 ? (
+                      <div className="p-4 text-xs text-slate-500">
+                        No matching cPanel or WHM tool found for &ldquo;{searchQuery}&rdquo;. Try{' '}
+                        <strong>terminal</strong>, <strong>api</strong>, <strong>sql</strong>,{' '}
+                        <strong>file</strong>, or <strong>whm</strong>.
+                      </div>
+                    ) : (
+                      <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto">
+                        {matchedSearchResults.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => handleSelectSearchResult(item)}
+                            className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition hover:bg-indigo-50/70"
+                          >
+                            <div>
+                              <div className="text-xs font-bold text-slate-900">{item.title}</div>
+                              <div className="mt-0.5 text-[11px] text-slate-500">
+                                {item.subtitle}
+                              </div>
+                            </div>
+                            <span className="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                              {item.badge}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -845,13 +1051,11 @@ export function CustomerPanelApp(): React.ReactElement {
                 section={activeWhmSection}
                 onSelectSection={(sec) => setActiveWhmSection(sec)}
                 accounts={whmAccounts}
-                packages={whmPackages}
                 services={whmServices}
                 onCreateAccount={handleWhmCreateAccount}
                 onToggleSuspendAccount={handleWhmToggleSuspend}
                 onTerminateAccount={handleWhmTerminateAccount}
                 onLaunchCpanelForAccount={handleWhmLaunchCpanel}
-                onCreatePackage={handleWhmCreatePackage}
                 onRestartService={handleWhmRestartService}
                 onShowToast={showToast}
               />

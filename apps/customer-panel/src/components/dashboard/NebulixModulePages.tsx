@@ -233,172 +233,146 @@ export const NebulixModulePages: React.FC<NebulixModulePageProps> = ({
   });
 
   /* ============================================================================
-     STATE FOR FILE MANAGER & 4-LAYER VIRUS / MALWARE / WAF SCANNER
+     STATE FOR WEB TERMINAL (cPANEL SANDBOXED CLI SHELL)
      ============================================================================ */
-  const [currentFolder, setCurrentFolder] = React.useState<string>(`/home/${activeLinuxUser}/public_html`);
-  const [isScanningUpload, setIsScanningUpload] = React.useState<boolean>(false);
-  const [lastScanReport, setLastScanReport] = React.useState<ScannedFileItem | null>(null);
-  const [editingFileItem, setEditingFileItem] = React.useState<ScannedFileItem | null>(null);
-  const [editingFileContent, setEditingFileContent] = React.useState<string>('');
-  const [newFolderName, setNewFolderName] = React.useState<string>('');
-  const [showNewFolderInput, setShowNewFolderInput] = React.useState<boolean>(false);
-  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
-
-  const [managedFiles, setManagedFiles] = React.useState<ScannedFileItem[]>([
-    {
-      id: 'f-1',
-      name: 'index.php',
-      folder: `/home/${activeLinuxUser}/public_html`,
-      type: 'PHP Script',
-      perms: '0644',
-      size: '14.2 KB',
-      scanStatus: 'CLEAN_VERIFIED',
-      clamAvResult: 'ClamAV: 0 Threats (Clean)',
-      yaraResult: 'YARA: No Webshell / Obfuscation',
-      wafResult: 'ModSecurity WAF: Passed (PHP-8.3)',
-      sha256: 'a94f82e1c09b71d3...4410',
-      uploadedAt: '2026-10-20 09:15 IST',
-      contentPreview: `<?php\n// Garvix Production Front Controller\ndeclare(strict_types=1);\nrequire __DIR__ . '/vendor/autoload.php';\n\n$app = Garvix\\Bootstrap::createApplication();\n$app->run();\n`,
-    },
-    {
-      id: 'f-2',
-      name: '.htaccess',
-      folder: `/home/${activeLinuxUser}/public_html`,
-      type: 'Config',
-      perms: '0644',
-      size: '1.8 KB',
-      scanStatus: 'CLEAN_VERIFIED',
-      clamAvResult: 'ClamAV: 0 Threats (Clean)',
-      yaraResult: 'YARA: Clean Config Rules',
-      wafResult: 'ModSecurity WAF: HSTS + CSP Active',
-      sha256: '7c21b904f81a32e1...8821',
-      uploadedAt: '2026-10-19 18:40 IST',
-      contentPreview: `# Security Headers & HTTPS Redirect\nRewriteEngine On\nRewriteCond %{HTTPS} !=on\nRewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]\nHeader always set X-Content-Type-Options "nosniff"\n`,
-    },
-    {
-      id: 'f-3',
-      name: 'wp-config.php',
-      folder: `/home/${activeLinuxUser}/public_html`,
-      type: 'Config',
-      perms: '0600',
-      size: '3.4 KB',
-      scanStatus: 'CLEAN_VERIFIED',
-      clamAvResult: 'ClamAV: 0 Threats (Clean)',
-      yaraResult: 'YARA: Clean DB Credentials File',
-      wafResult: 'ModSecurity WAF: Protected (chmod 0600)',
-      sha256: 'e310a771b94c82d4...1920',
-      uploadedAt: '2026-10-18 14:20 IST',
-      contentPreview: `<?php\ndefine('DB_NAME', 'garvix_app_prod');\ndefine('DB_USER', 'garvix_app');\ndefine('DB_HOST', '127.0.0.1:3306');\ndefine('DISALLOW_FILE_EDIT', true);\n`,
-    },
-    {
-      id: 'f-4',
-      name: 'assets-bundle-v2.zip',
-      folder: `/home/${activeLinuxUser}/public_html`,
-      type: 'Archive',
-      perms: '0644',
-      size: '4.8 MB',
-      scanStatus: 'CLEAN_VERIFIED',
-      clamAvResult: 'ClamAV: Archive Unpacked & Verified Clean',
-      yaraResult: 'YARA: 0 Suspicious Scripts Inside ZIP',
-      wafResult: 'ModSecurity WAF: Magic Bytes ZIP Verified',
-      sha256: 'b829d103f44c77e2...9012',
-      uploadedAt: '2026-10-20 11:05 IST',
-    },
-    {
-      id: 'f-5',
-      name: 'c99_webshell_exploit.php',
-      folder: `/home/${activeLinuxUser}/quarantine`,
-      type: 'PHP Script',
-      perms: '0000 (Locked)',
-      size: '68.4 KB',
-      scanStatus: 'QUARANTINED_BLOCKED',
-      clamAvResult: 'ALERT: PHP.Trojan.WebShell-c99 Detected!',
-      yaraResult: 'CRITICAL: eval(base64_decode) + shell_exec() Backdoor',
-      wafResult: 'BLOCKED: ModSecurity Rule #933150 (Malicious PHP Upload)',
-      sha256: 'ff09deadbeef8812...6619',
-      uploadedAt: '2026-10-20 12:10 IST',
-    },
+  const [terminalInput, setTerminalInput] = React.useState<string>('');
+  const [terminalHistory, setTerminalHistory] = React.useState<string[]>([
+    `Garvix cPanel Sandboxed Web Terminal — Linux UID Confinement (${activeLinuxUser}@${activeDomain})`,
+    `Working Directory: /home/${activeLinuxUser}/public_html`,
+    'Type "help" or click any quick command chip above (ls -la, php -v, node -v, git status, df -h, free -m).',
   ]);
 
-  const runFourStageSecurityScan = (fileName: string, fileSizeLabel: string, forceMalware = false) => {
-    setIsScanningUpload(true);
-    setTimeout(() => {
-      const lower = fileName.toLowerCase();
-      const isMalicious =
-        forceMalware ||
-        lower.includes('virus') ||
-        lower.includes('malware') ||
-        lower.includes('shell') ||
-        lower.includes('c99') ||
-        lower.includes('backdoor') ||
-        lower.includes('exploit') ||
-        lower.endsWith('.exe') ||
-        lower.endsWith('.sh') ||
-        lower.endsWith('.jpg.php');
+  const executeCpanelTerminalCommand = (rawCmd: string) => {
+    const cmd = rawCmd.trim();
+    if (!cmd) return;
+    const lower = cmd.toLowerCase();
+    const prompt = `${activeLinuxUser}@${activeDomain}:~/public_html$ ${cmd}`;
 
-      const hashPrefix = Math.random().toString(16).slice(2, 10);
-      const scannedItem: ScannedFileItem = isMalicious
-        ? {
-            id: `scan-${Date.now()}`,
-            name: fileName,
-            folder: `/home/${activeLinuxUser}/quarantine`,
-            type: 'PHP Script',
-            perms: '0000 (Locked)',
-            size: fileSizeLabel,
-            scanStatus: 'QUARANTINED_BLOCKED',
-            clamAvResult: 'BLOCKED: Trojan.PHP.Backdoor / Virus Signature Found',
-            yaraResult: 'CRITICAL: Suspicious shell_exec() / eval(base64_decode) payload',
-            wafResult: 'FIREWALL DROP: ModSecurity OWASP Rule #933100 Triggered',
-            sha256: `${hashPrefix}bad0091e...c99f`,
-            uploadedAt: 'Just now',
-          }
-        : {
-            id: `scan-${Date.now()}`,
-            name: fileName,
-            folder: currentFolder,
-            type: lower.endsWith('.zip') || lower.endsWith('.tar.gz')
-              ? 'Archive'
-              : lower.endsWith('.sql')
-                ? 'SQL Dump'
-                : lower.endsWith('.php')
-                  ? 'PHP Script'
-                  : 'Asset',
-            perms: '0644',
-            size: fileSizeLabel,
-            scanStatus: 'CLEAN_VERIFIED',
-            clamAvResult: 'ClamAV 1.3: 0 Viruses / 0 Trojans (100% Clean)',
-            yaraResult: 'YARA Heuristics: 0 Webshells / 0 Backdoors Found',
-            wafResult: 'ModSecurity WAF: MIME & Magic-Bytes Verified Safe',
-            sha256: `${hashPrefix}84a19c0d...71e2`,
-            uploadedAt: 'Just now',
-            contentPreview: `// Scanned & Verified Clean by Garvix Security Pipeline\n// File: ${fileName} (${fileSizeLabel})\n`,
-          };
+    if (lower === 'clear') {
+      setTerminalHistory([`Terminal cleared (${new Date().toLocaleTimeString()}).`]);
+      setTerminalInput('');
+      return;
+    }
 
-      setManagedFiles((prev) => [scannedItem, ...prev]);
-      setLastScanReport(scannedItem);
-      setIsScanningUpload(false);
+    let outputLines: string[] = [];
+    if (lower === 'help') {
+      outputLines = [
+        'Available sandboxed commands:',
+        '  ls -la       List files & permissions in /home/' + activeLinuxUser + '/public_html',
+        '  pwd          Print current working directory',
+        '  whoami       Display confined Linux username & UID',
+        '  php -v       Check active PHP-FPM CLI version',
+        '  node -v      Check active Node.js LTS runtime',
+        '  git status   Inspect Git deployment branch & working tree',
+        '  df -h        Show filesystem disk space usage',
+        '  free -m      Show server RAM memory statistics',
+        '  uptime       Show server load average & uptime',
+        '  clear        Clear terminal screen',
+      ];
+    } else if (lower.startsWith('ls')) {
+      outputLines = [
+        'drwxr-x---  6 ' + activeLinuxUser + ' nobody 4.0K Oct 20 13:40 .',
+        'drwx--x--x 11 ' + activeLinuxUser + ' ' + activeLinuxUser + ' 4.0K Oct 20 12:00 ..',
+        '-rw-r--r--  1 ' + activeLinuxUser + ' ' + activeLinuxUser + ' 1.8K Oct 20 09:40 .htaccess',
+        'drwxr-xr-x  3 ' + activeLinuxUser + ' ' + activeLinuxUser + ' 4.0K Oct 20 10:15 assets',
+        '-rw-r--r--  1 ' + activeLinuxUser + ' ' + activeLinuxUser + '  14K Oct 20 12:18 index.php',
+        '-rw-------  1 ' + activeLinuxUser + ' ' + activeLinuxUser + ' 3.4K Oct 18 15:20 wp-config.php',
+      ];
+    } else if (lower === 'pwd') {
+      outputLines = [`/home/${activeLinuxUser}/public_html`];
+    } else if (lower === 'whoami') {
+      outputLines = [`${activeLinuxUser} (uid=1004 gid=1004 groups=1004,systemd-slice-confined)`];
+    } else if (lower.startsWith('php')) {
+      outputLines = [
+        'PHP 8.3.12 (cli) (built: Oct 2026) (NTS)',
+        'Copyright (c) The PHP Group · Zend Engine v4.3.12 with Zend OPcache',
+      ];
+    } else if (lower.startsWith('node')) {
+      outputLines = ['v22.11.0 LTS'];
+    } else if (lower.startsWith('git')) {
+      outputLines = [
+        'On branch main',
+        `Your branch is up to date with 'origin/main' (https://github.com/${activeLinuxUser}/${activeDomain}).`,
+        'nothing to commit, working tree clean',
+      ];
+    } else if (lower.startsWith('df')) {
+      outputLines = [
+        'Filesystem      Size  Used Avail Use% Mounted on',
+        `/dev/nvme0n1p2  200G   38G  162G  19% /home/${activeLinuxUser}`,
+      ];
+    } else if (lower.startsWith('free')) {
+      outputLines = [
+        '               total        used        free      shared  buff/cache   available',
+        'Mem:           16384        4120        6840         210        5424       11980',
+      ];
+    } else if (lower === 'uptime') {
+      outputLines = ['15:48:12 up 42 days, 7:19, 1 user, load average: 0.24, 0.31, 0.28'];
+    } else if (lower.includes('sudo') || lower.includes('rm -rf /')) {
+      outputLines = [
+        'SECURITY BLOCK: Root privilege escalation and destructive root commands are forbidden inside cPanel user sandbox.',
+      ];
+    } else {
+      outputLines = [`Executed in sandbox: ${cmd} (exit code 0)`];
+    }
 
-      if (isMalicious) {
-        onShowToast(
-          `SECURITY BLOCK: "${fileName}" contained malware/virus signatures and was isolated in Quarantine!`
-        );
-      } else {
-        onShowToast(
-          `UPLOAD VERIFIED: "${fileName}" passed ClamAV, YARA & WAF scans and was saved to ${currentFolder}.`
-        );
-      }
-    }, 450);
+    setTerminalHistory((prev) => [...prev, prompt, ...outputLines]);
+    setTerminalInput('');
   };
 
-  const handleBrowserFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    const picked = files[0]!;
-    const kb = Math.max(1, Math.round(picked.size / 1024));
-    const sizeLabel = kb > 1024 ? `${(kb / 1024).toFixed(2)} MB` : `${kb} KB`;
-    runFourStageSecurityScan(picked.name, sizeLabel, false);
-    e.target.value = '';
-  };
+  /* ============================================================================
+     STATE FOR API TOKENS, CRON JOBS, PHP INI & GIT DEPLOY (`api-developer`)
+     ============================================================================ */
+  const [apiTokens, setApiTokens] = React.useState<
+    Array<{ id: string; name: string; tokenPreview: string; scopes: string; created: string }>
+  >([
+    {
+      id: 'tok-1',
+      name: 'GitHub Actions CI/CD Deployer',
+      tokenPreview: 'gvx_cpanel_live_98f2a10c...e491',
+      scopes: 'Files, Git Deploy, Cache Purge',
+      created: 'Oct 15, 2026',
+    },
+    {
+      id: 'tok-2',
+      name: 'External DNS & AutoSSL Sync',
+      tokenPreview: 'gvx_cpanel_live_44b1c08d...772a',
+      scopes: 'DNS Zone Read/Write, AutoSSL',
+      created: 'Oct 18, 2026',
+    },
+  ]);
+  const [newTokenName, setNewTokenName] = React.useState<string>('');
+  const [newTokenScopes, setNewTokenScopes] = React.useState<string>(
+    'Full cPanel API (DNS, Files, Email, DB, Backups)'
+  );
+  const [lastGeneratedPlainToken, setLastGeneratedPlainToken] = React.useState<string | null>(
+    null
+  );
+
+  const [cronJobs, setCronJobs] = React.useState<
+    Array<{ id: string; schedule: string; command: string }>
+  >([
+    {
+      id: 'cron-1',
+      schedule: '*/5 * * * * (Every 5 Minutes)',
+      command: `/usr/bin/php /home/${activeLinuxUser}/public_html/artisan schedule:run >> /dev/null 2>&1`,
+    },
+    {
+      id: 'cron-2',
+      schedule: '0 3 * * * (Daily at 03:00 AM)',
+      command: `/usr/local/bin/garvix-backup --account ${activeLinuxUser} --verify`,
+    },
+  ]);
+  const [newCronSchedule, setNewCronSchedule] = React.useState<string>('*/15 * * * * (Every 15 Minutes)');
+  const [newCronCommand, setNewCronCommand] = React.useState<string>(
+    `/usr/bin/php /home/${activeLinuxUser}/public_html/cron.php`
+  );
+
+  const [phpVersion, setPhpVersion] = React.useState<string>('PHP 8.3 (Default - FastCGI)');
+  const [phpMemoryLimit, setPhpMemoryLimit] = React.useState<string>('512M');
+  const [phpUploadMax, setPhpUploadMax] = React.useState<string>('256M');
+  const [gitRepoUrl, setGitRepoUrl] = React.useState<string>(
+    `https://github.com/${activeLinuxUser}/${activeDomain}.git`
+  );
 
   /* ------------------------------------------------------------------------
      1. WEBSITES & DOMAINS
@@ -1332,6 +1306,450 @@ export const NebulixModulePages: React.FC<NebulixModulePageProps> = ({
         activeLinuxUser={activeLinuxUser}
         onShowToast={onShowToast}
       />
+    );
+  }
+
+  /* ------------------------------------------------------------------------
+     4B. WEB TERMINAL (cPANEL SANDBOXED CLI SHELL)
+     ------------------------------------------------------------------------ */
+  if (section === 'web-terminal') {
+    return (
+      <AnimatedContent className="space-y-6">
+        <AuroraBackground className="p-6 sm:p-8">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <Badge variant="orange">cPANEL ADVANCED · WEB TERMINAL (CLI)</Badge>
+              <h1 className="mt-2 font-display text-2xl font-extrabold text-slate-900 sm:text-3xl">
+                <BlurText text="Interactive Sandboxed Web Terminal" />
+              </h1>
+              <p className="mt-1 text-xs text-slate-600">
+                Confined Linux shell session for <strong className="text-slate-900">{activeLinuxUser}</strong> inside{' '}
+                <code className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-800">
+                  /home/{activeLinuxUser}/public_html
+                </code>{' '}
+                with systemd cgroup v2 &amp; UID isolation.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  executeCpanelTerminalCommand('clear');
+                  onShowToast('Terminal history cleared.');
+                }}
+              >
+                <RefreshCw className="h-3.5 w-3.5" /> Clear Terminal
+              </Button>
+            </div>
+          </div>
+        </AuroraBackground>
+
+        {/* Quick Command Chips */}
+        <SpotlightCard className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">
+                1-Click Developer &amp; Diagnostic Commands
+              </h2>
+              <p className="text-xs text-slate-500">
+                Click any command below or type directly in the interactive shell prompt:
+              </p>
+            </div>
+            <Badge variant="success">SSH / PTY Connected · UID 1004</Badge>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              'ls -la',
+              'pwd',
+              'whoami',
+              'php -v',
+              'node -v',
+              'git status',
+              'df -h',
+              'free -m',
+              'uptime',
+              'help',
+            ].map((quickCmd) => (
+              <button
+                key={quickCmd}
+                type="button"
+                onClick={() => executeCpanelTerminalCommand(quickCmd)}
+                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 font-mono text-xs font-semibold text-slate-800 transition hover:border-orange-300 hover:bg-orange-50/70 hover:text-orange-700"
+              >
+                $ {quickCmd}
+              </button>
+            ))}
+          </div>
+
+          {/* Terminal Emulator Window */}
+          <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-4 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full bg-rose-500" />
+                <span className="h-3 w-3 rounded-full bg-amber-500" />
+                <span className="h-3 w-3 rounded-full bg-emerald-500" />
+                <span className="ml-2 font-mono text-xs font-semibold text-slate-300">
+                  {activeLinuxUser}@{activeDomain}:~/public_html (bash — 80×24)
+                </span>
+              </div>
+              <span className="font-mono text-[11px] text-emerald-400">
+                systemd-slice: user-{activeLinuxUser}.slice
+              </span>
+            </div>
+
+            <div className="max-h-80 min-h-[260px] space-y-1.5 overflow-y-auto p-4 font-mono text-xs leading-relaxed text-slate-200">
+              {terminalHistory.map((line, idx) => (
+                <div
+                  key={`${idx}-${line.slice(0, 14)}`}
+                  className={
+                    line.includes('$ ')
+                      ? 'font-bold text-orange-400'
+                      : line.startsWith('SECURITY BLOCK')
+                        ? 'font-bold text-rose-400'
+                        : 'text-slate-200'
+                  }
+                >
+                  {line}
+                </div>
+              ))}
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                executeCpanelTerminalCommand(terminalInput);
+              }}
+              className="flex items-center gap-2 border-t border-slate-800 bg-slate-900/90 px-4 py-3"
+            >
+              <span className="font-mono text-xs font-bold text-emerald-400">
+                {activeLinuxUser}@{activeDomain}:~/public_html$
+              </span>
+              <input
+                type="text"
+                value={terminalInput}
+                onChange={(e) => setTerminalInput(e.target.value)}
+                placeholder="Type a command (e.g. ls -la, php -v, git status, df -h) and press Enter..."
+                className="flex-1 bg-transparent font-mono text-xs text-white placeholder-slate-500 focus:outline-none"
+              />
+              <Button type="submit" size="sm">
+                <Play className="h-3.5 w-3.5" /> Run
+              </Button>
+            </form>
+          </div>
+        </SpotlightCard>
+      </AnimatedContent>
+    );
+  }
+
+  /* ------------------------------------------------------------------------
+     4C. API & DEVELOPER TOOLS (API TOKENS, CRON JOBS, MULTIPHP INI, GIT DEPLOY)
+     ------------------------------------------------------------------------ */
+  if (section === 'api-developer') {
+    return (
+      <AnimatedContent className="space-y-6">
+        <AuroraBackground className="p-6 sm:p-8">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <Badge variant="orange">cPANEL DEVELOPER SUITE · API &amp; AUTOMATION</Badge>
+              <h1 className="mt-2 font-display text-2xl font-extrabold text-slate-900 sm:text-3xl">
+                <BlurText text="cPanel API Tokens, Cron Jobs, MultiPHP & Git Deploy" />
+              </h1>
+              <p className="mt-1 text-xs text-slate-600">
+                Generate scoped REST API keys, automate scheduled Cron tasks, tune PHP/Node.js runtimes, and trigger Git deployments.
+              </p>
+            </div>
+            <Badge variant="success">{apiTokens.length} Active API Tokens</Badge>
+          </div>
+        </AuroraBackground>
+
+        {/* 1. cPanel API Token Manager */}
+        <div className="grid gap-6 lg:grid-cols-12">
+          <SpotlightCard className="space-y-4 lg:col-span-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-slate-900">Generate cPanel API Token</h2>
+              <Badge variant="orange">REST API v1 / UAPI</Badge>
+            </div>
+            <p className="text-xs text-slate-500">
+              Create bearer API tokens to automate DNS updates, deployments, backups, or databases from CI/CD pipelines.
+            </p>
+            <div>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-600">
+                Token Label / Application Name
+              </label>
+              <Input
+                value={newTokenName}
+                onChange={(e) => setNewTokenName(e.target.value)}
+                placeholder="e.g. GitHub Actions Deployer or Billing Webhook"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-600">
+                Permission Scope
+              </label>
+              <select
+                value={newTokenScopes}
+                onChange={(e) => setNewTokenScopes(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-900 focus:border-orange-500 focus:outline-none"
+              >
+                <option value="Full cPanel API (DNS, Files, Email, DB, Backups)">
+                  Full cPanel API (DNS, Files, Email, DB, Backups)
+                </option>
+                <option value="DNS Zone Read/Write & AutoSSL Only">
+                  DNS Zone Read/Write &amp; AutoSSL Only
+                </option>
+                <option value="Git Deploy & File Manager Only">
+                  Git Deploy &amp; File Manager Only
+                </option>
+                <option value="Read-Only Metrics & Backups">Read-Only Metrics &amp; Backups</option>
+              </select>
+            </div>
+            <Button
+              className="w-full"
+              onClick={() => {
+                const label = newTokenName.trim() || 'Custom Automation Token';
+                const randomHex = Math.random().toString(16).slice(2, 10);
+                const fullSecret = `gvx_cpanel_live_${randomHex}_${Date.now().toString(36)}`;
+                setApiTokens((prev) => [
+                  {
+                    id: `tok-${Date.now()}`,
+                    name: label,
+                    tokenPreview: `${fullSecret.slice(0, 22)}...${fullSecret.slice(-4)}`,
+                    scopes: newTokenScopes,
+                    created: 'Just now',
+                  },
+                  ...prev,
+                ]);
+                setLastGeneratedPlainToken(fullSecret);
+                setNewTokenName('');
+                onShowToast(`Generated cPanel API token "${label}"`);
+              }}
+            >
+              <KeyRound className="h-4 w-4" /> Generate New API Token
+            </Button>
+
+            {lastGeneratedPlainToken && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-3.5 text-xs">
+                <p className="font-bold text-emerald-900">
+                  Copy your new API Token now (shown once):
+                </p>
+                <code className="mt-1.5 block break-all rounded-lg border border-emerald-300 bg-white p-2 font-mono text-[11px] font-bold text-slate-900">
+                  {lastGeneratedPlainToken}
+                </code>
+              </div>
+            )}
+          </SpotlightCard>
+
+          <SpotlightCard className="space-y-4 lg:col-span-7">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-slate-900">
+                Active API Tokens &amp; cURL Quickstart
+              </h2>
+              <span className="font-mono text-xs text-slate-500">
+                Endpoint: https://{activeDomain}:2083/api/v1
+              </span>
+            </div>
+
+            <div className="space-y-2.5">
+              {apiTokens.map((tok) => (
+                <div
+                  key={tok.id}
+                  className="flex flex-col justify-between gap-3 rounded-xl border border-slate-200/90 bg-slate-50/70 p-3.5 sm:flex-row sm:items-center"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-slate-900">{tok.name}</span>
+                      <Badge variant="success">Active</Badge>
+                    </div>
+                    <p className="mt-0.5 font-mono text-xs text-slate-600">{tok.tokenPreview}</p>
+                    <p className="mt-0.5 text-[11px] text-slate-500">
+                      Scopes: {tok.scopes} · Created: {tok.created}
+                    </p>
+                  </div>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      setApiTokens((prev) => prev.filter((item) => item.id !== tok.id));
+                      onShowToast(`Revoked API token "${tok.name}"`);
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Revoke
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-900 p-3.5 font-mono text-[11px] text-slate-200">
+              <p className="mb-1 text-xs font-bold text-orange-400">
+                # Example: Trigger cPanel DNS / Backup via REST API
+              </p>
+              <code>
+                curl -X GET &quot;https://{activeDomain}:2083/api/v1/domains&quot; \<br />
+                &nbsp;&nbsp;-H &quot;Authorization: Bearer{' '}
+                {lastGeneratedPlainToken ?? 'gvx_cpanel_live_98f2a10c...'}&quot;
+              </code>
+            </div>
+          </SpotlightCard>
+        </div>
+
+        {/* 2. Cron Jobs Scheduler & 3. MultiPHP INI + Git Version Control */}
+        <div className="grid gap-6 lg:grid-cols-12">
+          <SpotlightCard className="space-y-4 lg:col-span-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-slate-900">
+                Cron Jobs (Scheduled Tasks)
+              </h2>
+              <Badge variant="default">{cronJobs.length} Active Schedules</Badge>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-600">
+                  Common Schedule
+                </label>
+                <select
+                  value={newCronSchedule}
+                  onChange={(e) => setNewCronSchedule(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900"
+                >
+                  <option value="* * * * * (Every Minute)">* * * * * (Every Minute)</option>
+                  <option value="*/5 * * * * (Every 5 Minutes)">*/5 * * * * (Every 5 Minutes)</option>
+                  <option value="*/15 * * * * (Every 15 Minutes)">*/15 * * * * (Every 15 Minutes)</option>
+                  <option value="0 * * * * (Once Per Hour)">0 * * * * (Once Per Hour)</option>
+                  <option value="0 3 * * * (Daily at 03:00 AM)">0 3 * * * (Daily at 03:00 AM)</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-600">
+                  Command to Run
+                </label>
+                <Input
+                  value={newCronCommand}
+                  onChange={(e) => setNewCronCommand(e.target.value)}
+                />
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => {
+                if (!newCronCommand.trim()) return;
+                setCronJobs((prev) => [
+                  ...prev,
+                  {
+                    id: `cron-${Date.now()}`,
+                    schedule: newCronSchedule,
+                    command: newCronCommand.trim(),
+                  },
+                ]);
+                onShowToast(`Added Cron Job (${newCronSchedule})`);
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" /> Add Cron Job
+            </Button>
+
+            <div className="space-y-2 pt-2">
+              {cronJobs.map((job) => (
+                <div
+                  key={job.id}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs"
+                >
+                  <div>
+                    <span className="font-mono font-bold text-orange-600">{job.schedule}</span>
+                    <p className="mt-0.5 font-mono text-[11px] text-slate-700">{job.command}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setCronJobs((prev) => prev.filter((c) => c.id !== job.id));
+                      onShowToast('Removed Cron Job');
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </SpotlightCard>
+
+          <SpotlightCard className="space-y-4 lg:col-span-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-slate-900">
+                MultiPHP INI Editor &amp; Git™ Version Control
+              </h2>
+              <Badge variant="success">PHP-FPM + Node 22</Badge>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-600">
+                  PHP Version
+                </label>
+                <select
+                  value={phpVersion}
+                  onChange={(e) => setPhpVersion(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900"
+                >
+                  <option value="PHP 8.3 (Default - FastCGI)">PHP 8.3 (Default - FastCGI)</option>
+                  <option value="PHP 8.2 (Stable)">PHP 8.2 (Stable)</option>
+                  <option value="PHP 8.1 (Legacy LTS)">PHP 8.1 (Legacy LTS)</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-600">
+                  memory_limit
+                </label>
+                <Input
+                  value={phpMemoryLimit}
+                  onChange={(e) => setPhpMemoryLimit(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-600">
+                  upload_max_filesize
+                </label>
+                <Input
+                  value={phpUploadMax}
+                  onChange={(e) => setPhpUploadMax(e.target.value)}
+                />
+              </div>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                onShowToast(
+                  `Applied ${phpVersion} INI settings (memory_limit=${phpMemoryLimit}, upload_max_filesize=${phpUploadMax})`
+                )
+              }
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" /> Apply MultiPHP INI Settings
+            </Button>
+
+            <div className="border-t border-slate-200/80 pt-4">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                Git™ Repository Pull &amp; Deployment
+              </h3>
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                <div className="flex-1">
+                  <Input
+                    value={gitRepoUrl}
+                    onChange={(e) => setGitRepoUrl(e.target.value)}
+                    placeholder="https://github.com/org/repo.git"
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    onShowToast(`Pulled latest commit from ${gitRepoUrl} into /home/${activeLinuxUser}/public_html`)
+                  }
+                >
+                  <RefreshCw className="h-3.5 w-3.5" /> Pull &amp; Deploy HEAD
+                </Button>
+              </div>
+            </div>
+          </SpotlightCard>
+        </div>
+      </AnimatedContent>
     );
   }
 

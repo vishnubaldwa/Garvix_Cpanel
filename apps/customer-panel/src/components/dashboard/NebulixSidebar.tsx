@@ -5,6 +5,8 @@ import {
   Mail,
   Database,
   FolderOpen,
+  Terminal,
+  Code2,
   ShieldCheck,
   CloudDownload,
   Lock,
@@ -22,6 +24,8 @@ export type NebulixSidebarSectionId =
   | 'email-accounts'
   | 'databases'
   | 'file-manager'
+  | 'web-terminal'
+  | 'api-developer'
   | 'ssl-certificates'
   | 'backups'
   | 'security'
@@ -36,13 +40,15 @@ export interface NebulixNavEntry {
 
 export const NEBULIX_SIDEBAR_ITEMS: readonly NebulixNavEntry[] = [
   { id: 'dashboard', label: 'Dashboard', badge: 'cPanel', icon: LayoutDashboard },
+  { id: 'file-manager', label: 'File Manager', badge: 'ClamAV', icon: FolderOpen },
   { id: 'websites-domains', label: 'Domains & DNS', badge: '5', icon: Globe },
   { id: 'email-accounts', label: 'Email Accounts', badge: '18', icon: Mail },
-  { id: 'databases', label: 'Databases', badge: 'PG/MySQL', icon: Database },
-  { id: 'file-manager', label: 'File Manager', icon: FolderOpen },
+  { id: 'databases', label: 'Databases & SQL', badge: 'SQL Studio', icon: Database },
+  { id: 'web-terminal', label: 'Web Terminal', badge: 'CLI', icon: Terminal },
+  { id: 'api-developer', label: 'API & Developer', badge: 'API/Cron', icon: Code2 },
   { id: 'ssl-certificates', label: 'SSL Certificates', badge: 'AutoSSL', icon: ShieldCheck },
   { id: 'backups', label: 'Backups', badge: 'Daily', icon: CloudDownload },
-  { id: 'security', label: 'Security', icon: Lock },
+  { id: 'security', label: 'Security & WAF', icon: Lock },
   { id: 'settings', label: 'Settings', icon: Sliders },
 ];
 
@@ -63,7 +69,6 @@ export const NebulixSidebar: React.FC<NebulixSidebarProps> = ({
   onSelectItem,
   activeCpanelDomain = 'garvixcloud.in',
   activeCpanelUser = 'garvixprod',
-  onSwitchToWhm,
   mobileOpen,
   onCloseMobile,
 }) => {
@@ -135,7 +140,7 @@ export const NebulixSidebar: React.FC<NebulixSidebarProps> = ({
                     onSelectItem(item.id);
                     onCloseMobile();
                   }}
-                  className={`group relative flex w-full items-center justify-between rounded-2xl px-3.5 py-2.5 text-left text-xs font-semibold transition-all duration-200 ${
+                  className={`group relative flex w-full items-center justify-between rounded-2xl px-3.5 py-2 text-left text-xs font-semibold transition-all duration-200 ${
                     isActive
                       ? 'bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600 text-white shadow-[0_8px_20px_-6px_rgba(99,102,241,0.55)]'
                       : 'text-slate-600 hover:bg-indigo-50/80 hover:text-indigo-950'
@@ -143,7 +148,7 @@ export const NebulixSidebar: React.FC<NebulixSidebarProps> = ({
                 >
                   <span className="flex items-center gap-3">
                     <span
-                      className={`flex h-8 w-8 items-center justify-center rounded-xl transition-colors ${
+                      className={`flex h-7 w-7 items-center justify-center rounded-xl transition-colors ${
                         isActive
                           ? 'bg-white/20 text-white'
                           : 'bg-slate-100/90 text-slate-600 group-hover:bg-white group-hover:text-indigo-600 group-hover:shadow-sm'
