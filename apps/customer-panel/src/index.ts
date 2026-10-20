@@ -8,6 +8,7 @@ export { NebulixStatsGrid } from './components/dashboard/NebulixStatsGrid.js';
 export { NebulixServerMonitoring } from './components/dashboard/NebulixServerMonitoring.js';
 export { NebulixQuickActions } from './components/dashboard/NebulixQuickActions.js';
 export { NebulixModulePages } from './components/dashboard/NebulixModulePages.js';
+export { NebulixWhmSidebar, NebulixWhmWorkspace } from './components/dashboard/NebulixWhmWorkspace.js';
 
 
 /**

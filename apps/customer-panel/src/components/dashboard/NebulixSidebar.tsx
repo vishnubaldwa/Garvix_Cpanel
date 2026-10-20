@@ -51,6 +51,9 @@ export interface NebulixSidebarProps {
   onSelectItem: (item: NebulixSidebarSectionId) => void;
   activeRole?: GarvixRole;
   authorizedNavItems?: NavigationItem[];
+  activeCpanelDomain?: string;
+  activeCpanelUser?: string;
+  onSwitchToWhm?: () => void;
   mobileOpen: boolean;
   onCloseMobile: () => void;
 }
@@ -58,6 +61,9 @@ export interface NebulixSidebarProps {
 export const NebulixSidebar: React.FC<NebulixSidebarProps> = ({
   activeItem,
   onSelectItem,
+  activeCpanelDomain = 'garvixcloud.in',
+  activeCpanelUser = 'garvixprod',
+  onSwitchToWhm,
   mobileOpen,
   onCloseMobile,
 }) => {
@@ -105,10 +111,10 @@ export const NebulixSidebar: React.FC<NebulixSidebarProps> = ({
             </span>
           </div>
           <div className="mt-1 truncate font-mono text-xs font-bold text-slate-900">
-            garvixcloud.in
+            {activeCpanelDomain}
           </div>
           <div className="mt-0.5 text-[11px] text-slate-500">
-            User: `garvixprod` · Port 2083 (SSL)
+            User: `{activeCpanelUser}` · Port 2083 (SSL)
           </div>
         </div>
 

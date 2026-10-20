@@ -4,7 +4,6 @@ import {
   Plus,
   Lock,
   CheckCircle2,
-  ServerCog,
   CreditCard,
   KeyRound,
   UserCheck,
@@ -20,16 +19,9 @@ import {
 import {
   getAuthorizedNavigationForRole,
   Button,
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
   Badge,
   Input,
-  Separator,
   DialogModal,
-  SpotlightCard,
   BlurText,
   DecryptedText,
   AuroraBackground,
@@ -47,6 +39,14 @@ import { NebulixStatsGrid } from './components/dashboard/NebulixStatsGrid.js';
 import { NebulixServerMonitoring } from './components/dashboard/NebulixServerMonitoring.js';
 import { NebulixQuickActions } from './components/dashboard/NebulixQuickActions.js';
 import { NebulixModulePages } from './components/dashboard/NebulixModulePages.js';
+import {
+  NebulixWhmSidebar,
+  NebulixWhmWorkspace,
+  type NebulixWhmSectionId,
+  type WhmCpanelAccountItem,
+  type WhmHostingPackageItem,
+  type WhmServiceDaemonItem,
+} from './components/dashboard/NebulixWhmWorkspace.js';
 
 type PanelSurface = 'cpanel' | 'whm' | 'store' | 'login';
 
@@ -103,6 +103,141 @@ const INITIAL_DATABASES: HostedDbItem[] = [
   },
 ];
 
+const INITIAL_WHM_ACCOUNTS: WhmCpanelAccountItem[] = [
+  {
+    id: 'acct-1',
+    domain: 'garvixcloud.in',
+    username: 'garvixprod',
+    email: 'vishnu@garvixcloud.in',
+    packageName: 'Agency Unlimited',
+    diskUsedGb: 14.2,
+    diskQuotaGb: 50,
+    emailAccounts: 18,
+    databases: 2,
+    status: 'ACTIVE',
+    createdAt: '2026-01-12',
+  },
+  {
+    id: 'acct-2',
+    domain: 'acmecorp.in',
+    username: 'acmecorp',
+    email: 'admin@acmecorp.in',
+    packageName: 'Business 25GB',
+    diskUsedGb: 6.4,
+    diskQuotaGb: 25,
+    emailAccounts: 8,
+    databases: 3,
+    status: 'ACTIVE',
+    createdAt: '2026-04-08',
+  },
+  {
+    id: 'acct-3',
+    domain: 'shopkart.co.in',
+    username: 'shopkart',
+    email: 'tech@shopkart.co.in',
+    packageName: 'Starter 10GB',
+    diskUsedGb: 2.1,
+    diskQuotaGb: 10,
+    emailAccounts: 4,
+    databases: 1,
+    status: 'ACTIVE',
+    createdAt: '2026-07-19',
+  },
+];
+
+const INITIAL_WHM_PACKAGES: WhmHostingPackageItem[] = [
+  {
+    id: 'pkg-1',
+    name: 'Starter 10GB',
+    diskQuotaGb: 10,
+    bandwidthGb: 100,
+    maxEmails: 10,
+    maxDatabases: 3,
+    maxDomains: 3,
+  },
+  {
+    id: 'pkg-2',
+    name: 'Business 25GB',
+    diskQuotaGb: 25,
+    bandwidthGb: 500,
+    maxEmails: 50,
+    maxDatabases: 10,
+    maxDomains: 10,
+  },
+  {
+    id: 'pkg-3',
+    name: 'Agency Unlimited',
+    diskQuotaGb: 50,
+    bandwidthGb: 2000,
+    maxEmails: 200,
+    maxDatabases: 50,
+    maxDomains: 50,
+  },
+];
+
+const INITIAL_WHM_SERVICES: WhmServiceDaemonItem[] = [
+  {
+    id: 'svc-nginx',
+    unit: 'nginx.service',
+    title: 'Nginx HTTP/3 Web Server',
+    description: 'Reverse proxy, VirtualHosts & TLS 1.3 termination',
+    pid: 1142,
+    memoryMb: 128,
+    status: 'RUNNING',
+    lastRestarted: 'Uptime 42d 11h',
+  },
+  {
+    id: 'svc-php',
+    unit: 'php83-php-fpm.service',
+    title: 'PHP-FPM 8.3 Multi-Pool',
+    description: 'Isolated per-cPanel UID/GID PHP worker pools',
+    pid: 1289,
+    memoryMb: 340,
+    status: 'RUNNING',
+    lastRestarted: 'Uptime 42d 11h',
+  },
+  {
+    id: 'svc-pg',
+    unit: 'postgresql-16.service',
+    title: 'PostgreSQL 16 Database',
+    description: 'Customer relational database cluster (Port 5432)',
+    pid: 1410,
+    memoryMb: 612,
+    status: 'RUNNING',
+    lastRestarted: 'Uptime 42d 11h',
+  },
+  {
+    id: 'svc-mariadb',
+    unit: 'mariadb.service',
+    title: 'MariaDB 10.11 (MySQL)',
+    description: 'InnoDB database server for WordPress & PHP apps',
+    pid: 1504,
+    memoryMb: 520,
+    status: 'RUNNING',
+    lastRestarted: 'Uptime 42d 11h',
+  },
+  {
+    id: 'svc-mail',
+    unit: 'postfix + dovecot',
+    title: 'Mail & Webmail Server',
+    description: 'SMTP submission, IMAP/POP3, DKIM & Rspamd filter',
+    pid: 1622,
+    memoryMb: 280,
+    status: 'RUNNING',
+    lastRestarted: 'Uptime 42d 11h',
+  },
+  {
+    id: 'svc-dns',
+    unit: 'named.service',
+    title: 'Bind9 Authoritative DNS',
+    description: 'DNS zone server with named-checkzone validation',
+    pid: 1708,
+    memoryMb: 94,
+    status: 'RUNNING',
+    lastRestarted: 'Uptime 42d 11h',
+  },
+];
+
 const STORE_PLANS = [
   {
     code: 'SOLO',
@@ -142,8 +277,22 @@ export function CustomerPanelApp(): React.ReactElement {
   const [activeSurface, setActiveSurface] = React.useState<PanelSurface>('cpanel');
   const [activeSidebarItem, setActiveSidebarItem] =
     React.useState<NebulixSidebarSectionId>('dashboard');
+  const [activeWhmSection, setActiveWhmSection] =
+    React.useState<NebulixWhmSectionId>('whm-overview');
   const [mobileSidebarOpen, setMobileSidebarOpen] = React.useState<boolean>(false);
   const [activeRole] = React.useState<GarvixRole>('HOSTING_ACCOUNT_OWNER');
+
+  // Active cPanel account context (can be switched via WHM [cP] Open cPanel!)
+  const [activeCpanelDomain, setActiveCpanelDomain] = React.useState<string>('garvixcloud.in');
+  const [activeCpanelUser, setActiveCpanelUser] = React.useState<string>('garvixprod');
+
+  // WHM multi-account & server states
+  const [whmAccounts, setWhmAccounts] =
+    React.useState<WhmCpanelAccountItem[]>(INITIAL_WHM_ACCOUNTS);
+  const [whmPackages, setWhmPackages] =
+    React.useState<WhmHostingPackageItem[]>(INITIAL_WHM_PACKAGES);
+  const [whmServices, setWhmServices] =
+    React.useState<WhmServiceDaemonItem[]>(INITIAL_WHM_SERVICES);
 
   // Existing interactive states preserved
   const [dnsRecords, setDnsRecords] = React.useState<DnsRecordItem[]>(INITIAL_DNS_RECORDS);
@@ -208,19 +357,21 @@ export function CustomerPanelApp(): React.ReactElement {
     setEmailCount((prev) => prev + 1);
     setNewEmailUser('');
     setEmailModalOpen(false);
-    showToast(`Mailbox ${newEmailUser.trim()}@garvixcloud.in provisioned with Argon2id + DKIM.`);
+    showToast(
+      `Mailbox ${newEmailUser.trim()}@${activeCpanelDomain} provisioned with Argon2id + DKIM.`
+    );
   };
 
   const handleCreateDatabase = () => {
     const suffix = Math.floor(100 + Math.random() * 900);
-    const dbName = `garvixprod_db${suffix}`;
+    const dbName = `${activeCpanelUser}_db${suffix}`;
     setDatabases((prev) => [
       ...prev,
       {
         id: `db-${Date.now()}`,
         name: dbName,
         engine: prev.length % 2 === 0 ? 'POSTGRESQL_16' : 'MARIADB_10_11',
-        dbUser: `garvixprod_u${suffix}`,
+        dbUser: `${activeCpanelUser}_u${suffix}`,
         sizeMb: 12,
       },
     ]);
@@ -243,21 +394,121 @@ export function CustomerPanelApp(): React.ReactElement {
     showToast(`Razorpay payment verified! Issued license key for ${checkoutPlan.name}.`);
   };
 
+  // WHM Handlers
+  const handleWhmCreateAccount = (payload: {
+    domain: string;
+    username: string;
+    email: string;
+    packageName: string;
+  }) => {
+    const pkg = whmPackages.find((p) => p.name === payload.packageName);
+    const newAcct: WhmCpanelAccountItem = {
+      id: `acct-${Date.now()}`,
+      domain: payload.domain,
+      username: payload.username,
+      email: payload.email,
+      packageName: payload.packageName,
+      diskUsedGb: 0.2,
+      diskQuotaGb: pkg?.diskQuotaGb ?? 25,
+      emailAccounts: 1,
+      databases: 0,
+      status: 'ACTIVE',
+      createdAt: new Date().toISOString().slice(0, 10),
+    };
+    setWhmAccounts((prev) => [newAcct, ...prev]);
+    showToast(
+      `WHM: Provisioned isolated cPanel account ${payload.username} (${payload.domain}) in /home/${payload.username}.`
+    );
+  };
+
+  const handleWhmToggleSuspend = (accountId: string) => {
+    setWhmAccounts((prev) =>
+      prev.map((acct) => {
+        if (acct.id !== accountId) return acct;
+        const nextStatus = acct.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
+        showToast(
+          `WHM: Account ${acct.username} (${acct.domain}) is now ${nextStatus}.`
+        );
+        return { ...acct, status: nextStatus };
+      })
+    );
+  };
+
+  const handleWhmTerminateAccount = (accountId: string) => {
+    const target = whmAccounts.find((a) => a.id === accountId);
+    if (!target) return;
+    setWhmAccounts((prev) => prev.filter((a) => a.id !== accountId));
+    showToast(`WHM: Terminated cPanel account ${target.username} (${target.domain}).`);
+  };
+
+  const handleWhmLaunchCpanel = (acct: WhmCpanelAccountItem) => {
+    setActiveCpanelDomain(acct.domain);
+    setActiveCpanelUser(acct.username);
+    setActiveSidebarItem('dashboard');
+    setActiveSurface('cpanel');
+    showToast(
+      `WHM Single Sign-On: Opened cPanel for ${acct.domain} (User: ${acct.username}).`
+    );
+  };
+
+  const handleWhmCreatePackage = (pkg: Omit<WhmHostingPackageItem, 'id'>) => {
+    setWhmPackages((prev) => [
+      ...prev,
+      {
+        ...pkg,
+        id: `pkg-${Date.now()}`,
+      },
+    ]);
+    showToast(`WHM: Created resource package "${pkg.name}" (${pkg.diskQuotaGb} GB Disk).`);
+  };
+
+  const handleWhmRestartService = (serviceId: string) => {
+    setWhmServices((prev) =>
+      prev.map((svc) =>
+        svc.id === serviceId
+          ? {
+              ...svc,
+              pid: Math.floor(2000 + Math.random() * 7000),
+              lastRestarted: 'Restarted just now (0s ago)',
+            }
+          : svc
+      )
+    );
+    const target = whmServices.find((s) => s.id === serviceId);
+    if (target) {
+      showToast(`WHM: Gracefully restarted ${target.unit} (${target.title}).`);
+    }
+  };
+
   return (
     <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-[#F7F6FD] via-[#F4F2FC] to-[#EEF2FF] text-slate-900">
       <div className="flex min-h-screen">
-        {/* SECTION A: Premium Nebulix cPanel Sidebar */}
-        <NebulixSidebar
-          activeItem={activeSidebarItem}
-          onSelectItem={(item) => {
-            setActiveSidebarItem(item);
-            setActiveSurface('cpanel');
-          }}
-          activeRole={activeRole}
-          authorizedNavItems={authorizedNavItems}
-          mobileOpen={mobileSidebarOpen}
-          onCloseMobile={() => setMobileSidebarOpen(false)}
-        />
+        {/* SECTION A: Dynamic Sidebar — Renders WHM Sidebar in WHM mode, or cPanel Sidebar in cPanel mode */}
+        {activeSurface === 'whm' ? (
+          <NebulixWhmSidebar
+            activeSection={activeWhmSection}
+            onSelectSection={(sec) => setActiveWhmSection(sec)}
+            totalAccounts={whmAccounts.length}
+            mobileOpen={mobileSidebarOpen}
+            onCloseMobile={() => setMobileSidebarOpen(false)}
+            onSwitchToCpanel={() => setActiveSurface('cpanel')}
+          />
+        ) : (
+          <NebulixSidebar
+            activeItem={activeSidebarItem}
+            onSelectItem={(item) => {
+              setActiveSidebarItem(item);
+              setActiveSurface('cpanel');
+            }}
+            activeRole={activeRole}
+            authorizedNavItems={authorizedNavItems}
+            activeCpanelDomain={activeCpanelDomain}
+            activeCpanelUser={activeCpanelUser}
+            onSwitchToWhm={() => setActiveSurface('whm')}
+            mobileOpen={mobileSidebarOpen}
+            onCloseMobile={() => setMobileSidebarOpen(false)}
+          />
+        )}
 
         {/* Right Content Area */}
         <div className="flex min-w-0 flex-1 flex-col">
@@ -273,22 +524,26 @@ export function CustomerPanelApp(): React.ReactElement {
                 <Menu className="h-5 w-5" />
               </button>
               <span className="font-display text-sm font-extrabold tracking-tight text-slate-900 lg:hidden">
-                GARVIX cPanel
+                {activeSurface === 'whm' ? 'GARVIX WHM' : 'GARVIX cPanel'}
               </span>
 
               <div className="relative hidden sm:block">
                 <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="search"
-                  aria-label="Search cPanel tools, domains, mailboxes, databases"
-                  placeholder="Search cPanel tools, domains, emails, DBs..."
+                  aria-label="Search cPanel or WHM tools"
+                  placeholder={
+                    activeSurface === 'whm'
+                      ? 'Search WHM accounts, packages, services...'
+                      : 'Search cPanel tools, domains, emails, DBs...'
+                  }
                   className="h-10 w-64 rounded-2xl border border-indigo-100/90 bg-[#F7F6FD] pl-10 pr-4 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/15 md:w-80"
                 />
               </div>
             </div>
 
             <div className="flex items-center gap-1.5 sm:gap-2.5">
-              {/* Surface Switcher: Only cPanel, WHM, License Store, Login */}
+              {/* Surface Switcher: cPanel, WHM, License Store, Login */}
               <div className="flex rounded-xl border border-indigo-100 bg-[#F7F6FD] p-0.5 sm:p-1">
                 {(
                   [
@@ -324,12 +579,16 @@ export function CustomerPanelApp(): React.ReactElement {
 
               <div className="hidden items-center gap-2.5 rounded-2xl border border-indigo-100 bg-white px-3 py-1.5 shadow-2xs sm:flex">
                 <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-blue-600 text-xs font-bold text-white">
-                  cP
+                  {activeSurface === 'whm' ? 'WHM' : 'cP'}
                 </div>
                 <div className="hidden text-left md:block">
-                  <div className="text-xs font-bold leading-none text-slate-900">Vishnu Baldwa</div>
+                  <div className="text-xs font-bold leading-none text-slate-900">
+                    {activeSurface === 'whm' ? 'WHM Root Admin' : activeCpanelUser}
+                  </div>
                   <div className="mt-0.5 text-[10px] font-medium text-indigo-600">
-                    {CUSTOMER_PANEL_APP_METADATA.appName}
+                    {activeSurface === 'whm'
+                      ? 'WebHost Manager (2087)'
+                      : `${activeCpanelDomain} (2083)`}
                   </div>
                 </div>
               </div>
@@ -407,7 +666,7 @@ export function CustomerPanelApp(): React.ReactElement {
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <h3 className="font-display text-sm font-bold text-slate-900">
-                            Authoritative DNS Zone (`garvixcloud.in`)
+                            Authoritative DNS Zone (`{activeCpanelDomain}`)
                           </h3>
                           <p className="text-xs text-slate-500">
                             Validated via `named-checkzone` before atomic reload
@@ -506,134 +765,23 @@ export function CustomerPanelApp(): React.ReactElement {
             )}
 
             {/* =================================================================
-                SURFACE 2: GARVIX WHM (FOR MULTI-ACCOUNT WHM + cPANEL LICENSE USERS)
+                SURFACE 2: GARVIX WHM (DEDICATED MULTI-ACCOUNT & SERVER SUITE)
                ================================================================= */}
             {activeSurface === 'whm' && (
-              <AnimatedContent className="space-y-6">
-                <AuroraBackground className="p-6 sm:p-8">
-                  <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="orange">GARVIX WHM (WEBHOST MANAGER · PORT 2087)</Badge>
-                        <Badge variant="success">Multi-Account License Active</Badge>
-                      </div>
-                      <h1 className="mt-2 font-display text-2xl font-extrabold text-slate-900 sm:text-3xl flex items-center gap-2.5">
-                        <ServerCog className="h-7 w-7 text-indigo-600" />
-                        <BlurText text="Create & Manage Multiple cPanel Accounts on Your Server" />
-                      </h1>
-                      <p className="mt-1 text-xs text-slate-600 max-w-2xl">
-                        Included with WHM + cPanel licenses. Create isolated cPanel accounts for
-                        your websites or clients, set disk/bandwidth packages, and 1-click launch
-                        any account’s cPanel.
-                      </p>
-                    </div>
-                    <Button
-                      onClick={() =>
-                        showToast('Created new isolated cPanel account on your server via WHM.')
-                      }
-                    >
-                      <Plus className="h-4 w-4" /> Create New cPanel Account
-                    </Button>
-                  </div>
-                </AuroraBackground>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>List cPanel Accounts on Server (`whm.garvixcloud.in`)</CardTitle>
-                    <CardDescription>
-                      Click `[cP] Open cPanel` to log directly into any customer cPanel account
-                      without re-entering a password.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {[
-                      {
-                        domain: 'garvixcloud.in',
-                        user: 'garvixprod',
-                        pkg: 'Unlimited cPanel',
-                        disk: '14.2 GB / 50 GB',
-                        status: 'ACTIVE',
-                      },
-                      {
-                        domain: 'acmecorp.in',
-                        user: 'acmecorp',
-                        pkg: 'Business 25GB',
-                        disk: '6.4 GB / 25 GB',
-                        status: 'ACTIVE',
-                      },
-                      {
-                        domain: 'shopkart.co.in',
-                        user: 'shopkart',
-                        pkg: 'Starter 10GB',
-                        disk: '2.1 GB / 10 GB',
-                        status: 'ACTIVE',
-                      },
-                    ].map((acct) => (
-                      <div
-                        key={acct.user}
-                        className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-indigo-100 bg-[#FAF9FE] p-4 text-xs"
-                      >
-                        <div>
-                          <div className="font-mono text-sm font-bold text-slate-900">
-                            {acct.domain}
-                          </div>
-                          <div className="mt-0.5 text-slate-500">
-                            cPanel User: <span className="font-mono font-bold">{acct.user}</span> ·
-                            Package: {acct.pkg} · Disk: {acct.disk}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2.5">
-                          <Badge variant="success">{acct.status}</Badge>
-                          <Button
-                            size="sm"
-                            variant="nebulix"
-                            onClick={() => {
-                              setActiveSurface('cpanel');
-                              setActiveSidebarItem('dashboard');
-                              showToast(`Launched cPanel for ${acct.domain} (${acct.user}).`);
-                            }}
-                          >
-                            [cP] Open cPanel
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-
-                <div className="grid gap-4 sm:grid-cols-3">
-                  {[
-                    {
-                      unit: 'nginx.service',
-                      desc: 'Web Server & VirtualHosts',
-                      state: 'ACTIVE (running)',
-                    },
-                    {
-                      unit: 'php83-php-fpm.service',
-                      desc: 'Per-cPanel Account PHP-FPM Pools',
-                      state: 'ACTIVE (running)',
-                    },
-                    {
-                      unit: 'postfix + dovecot',
-                      desc: 'Mail Server & Webmail Services',
-                      state: 'ACTIVE (running)',
-                    },
-                  ].map((svc) => (
-                    <SpotlightCard key={svc.unit} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono text-xs font-bold text-indigo-950">
-                          {svc.unit}
-                        </span>
-                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                      </div>
-                      <p className="text-xs text-slate-500">{svc.desc}</p>
-                      <Badge variant="success" className="mt-2">
-                        {svc.state}
-                      </Badge>
-                    </SpotlightCard>
-                  ))}
-                </div>
-              </AnimatedContent>
+              <NebulixWhmWorkspace
+                section={activeWhmSection}
+                onSelectSection={(sec) => setActiveWhmSection(sec)}
+                accounts={whmAccounts}
+                packages={whmPackages}
+                services={whmServices}
+                onCreateAccount={handleWhmCreateAccount}
+                onToggleSuspendAccount={handleWhmToggleSuspend}
+                onTerminateAccount={handleWhmTerminateAccount}
+                onLaunchCpanelForAccount={handleWhmLaunchCpanel}
+                onCreatePackage={handleWhmCreatePackage}
+                onRestartService={handleWhmRestartService}
+                onShowToast={showToast}
+              />
             )}
 
             {/* =================================================================
