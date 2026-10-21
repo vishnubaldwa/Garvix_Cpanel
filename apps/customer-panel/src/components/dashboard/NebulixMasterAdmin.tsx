@@ -31,12 +31,14 @@ import {
 } from '@garvix/ui-components';
 
 export type LicensePanelMode = 'ONLY_CPANEL' | 'WHM_AND_CPANEL';
+export type LicenseBillingCycle = 'MONTHLY' | 'YEARLY';
 
 export interface GarvixLicensePlanConfig {
   code: string;
   name: string;
   badge: string;
   monthlyInr: number;
+  yearlyInr: number;
   panelMode: LicensePanelMode;
   maxAccounts: number; // 0 = Unlimited, 1 = Solo, 5, 30, 100, etc.
   maxAccountsLabel: string;
@@ -51,6 +53,7 @@ export interface IssuedCustomerLicenseRecord {
   password: string;
   planCode: string;
   planName: string;
+  billingCycle?: LicenseBillingCycle;
   panelMode: LicensePanelMode;
   maxAccounts: number;
   serverIp: string;
@@ -58,6 +61,7 @@ export interface IssuedCustomerLicenseRecord {
   licenseKey: string;
   status: 'ACTIVE' | 'SUSPENDED';
   createdAt: string;
+  expiresAt?: string;
 }
 
 export interface RazorpayGatewayConfig {
@@ -113,6 +117,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
   const [formName, setFormName] = React.useState('');
   const [formBadge, setFormBadge] = React.useState('');
   const [formMonthlyInr, setFormMonthlyInr] = React.useState<number>(999);
+  const [formYearlyInr, setFormYearlyInr] = React.useState<number>(9990);
   const [formPanelMode, setFormPanelMode] = React.useState<LicensePanelMode>('WHM_AND_CPANEL');
   const [formMaxAccounts, setFormMaxAccounts] = React.useState<number>(10);
   const [formBestFor, setFormBestFor] = React.useState('');
@@ -123,6 +128,8 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
   const [newLicPassword, setNewLicPassword] = React.useState('');
   const [newLicServerIp, setNewLicServerIp] = React.useState('200.234.39.100');
   const [newLicPlanCode, setNewLicPlanCode] = React.useState(plans[0]?.code || 'WHM_PRO');
+  const [newLicBillingCycle, setNewLicBillingCycle] =
+    React.useState<LicenseBillingCycle>('MONTHLY');
 
   // Razorpay & Payment Gateway Form State
   const [rzpEnabled, setRzpEnabled] = React.useState<boolean>(razorpayConfig.enabled);
@@ -182,6 +189,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
     setFormName(plan.name);
     setFormBadge(plan.badge);
     setFormMonthlyInr(plan.monthlyInr);
+    setFormYearlyInr(plan.yearlyInr || plan.monthlyInr * 10);
     setFormPanelMode(plan.panelMode);
     setFormMaxAccounts(plan.maxAccounts);
     setFormBestFor(plan.bestFor);
@@ -194,6 +202,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
     setFormName('WHM Business');
     setFormBadge('UP TO 15 ACCOUNTS');
     setFormMonthlyInr(1299);
+    setFormYearlyInr(12990);
     setFormPanelMode('WHM_AND_CPANEL');
     setFormMaxAccounts(15);
     setFormBestFor('Growing agencies & multi-site servers');
@@ -205,6 +214,8 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
     if (!formName.trim()) return;
     const normalizedMax =
       formPanelMode === 'ONLY_CPANEL' ? 1 : Math.max(0, Number(formMaxAccounts));
+    const cleanMonthly = Math.max(1, Number(formMonthlyInr) || 499);
+    const cleanYearly = Math.max(1, Number(formYearlyInr) || cleanMonthly * 10);
     const updatedPlan: GarvixLicensePlanConfig = {
       code:
         editingCode === '__NEW__'
@@ -218,7 +229,8 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
           : normalizedMax === 0
             ? 'UNLIMITED ACCOUNTS'
             : `UP TO ${normalizedMax} ACCOUNTS`),
-      monthlyInr: Math.max(1, Number(formMonthlyInr) || 499),
+      monthlyInr: cleanMonthly,
+      yearlyInr: cleanYearly,
       panelMode: formPanelMode,
       maxAccounts: normalizedMax,
       maxAccountsLabel: computeAccountsLabel(formPanelMode, normalizedMax),
@@ -237,14 +249,17 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
     onSavePlans(nextPlans);
     setEditingCode(null);
     onShowToast(
-      `Saved plan "${updatedPlan.name}" (₹${updatedPlan.monthlyInr}/mo · ${updatedPlan.maxAccountsLabel}). Public Home Page updated!`
+      `Saved plan "${updatedPlan.name}" (₹${updatedPlan.monthlyInr}/mo · ₹${updatedPlan.yearlyInr}/yr · ${updatedPlan.maxAccountsLabel}).`
     );
   };
 
   const handleQuickUpdatePlan = (
     code: string,
     patch: Partial<
-      Pick<GarvixLicensePlanConfig, 'monthlyInr' | 'maxAccounts' | 'panelMode' | 'popular'>
+      Pick<
+        GarvixLicensePlanConfig,
+        'monthlyInr' | 'yearlyInr' | 'maxAccounts' | 'panelMode' | 'popular'
+      >
     >
   ) => {
     const nextPlans = plans.map((plan) => {
@@ -283,7 +298,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
       );
       onSaveCustomerLicenses(syncedLicenses);
       onShowToast(
-        `Updated ${targetPlan.name}: ₹${targetPlan.monthlyInr}/mo · ${targetPlan.maxAccountsLabel}`
+        `Updated ${targetPlan.name}: ₹${targetPlan.monthlyInr}/mo · ₹${targetPlan.yearlyInr}/yr · ${targetPlan.maxAccountsLabel}`
       );
     }
   };
@@ -304,12 +319,18 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
     const selectedPlan = plans.find((p) => p.code === newLicPlanCode) || plans[0];
     if (!selectedPlan) return;
     const randomHex = Math.random().toString(16).substring(2, 6).toUpperCase();
+    const expiryDate = new Date(
+      Date.now() + (newLicBillingCycle === 'YEARLY' ? 365 : 30) * 24 * 60 * 60 * 1000
+    )
+      .toISOString()
+      .slice(0, 10);
     const newRecord: IssuedCustomerLicenseRecord = {
       id: `lic-${Date.now()}`,
       customerEmail: newLicEmail.trim().toLowerCase(),
       password: newLicPassword.trim(),
       planCode: selectedPlan.code,
       planName: selectedPlan.name,
+      billingCycle: newLicBillingCycle,
       panelMode: selectedPlan.panelMode,
       maxAccounts: selectedPlan.maxAccounts,
       serverIp: newLicServerIp.trim(),
@@ -317,12 +338,13 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
       licenseKey: `GVX-${selectedPlan.code}-${randomHex}-2026-ED25519`,
       status: 'ACTIVE',
       createdAt: new Date().toISOString().slice(0, 10),
+      expiresAt: expiryDate,
     };
     onSaveCustomerLicenses([newRecord, ...customerLicenses]);
     setNewLicEmail('');
     setNewLicPassword('');
     onShowToast(
-      `Created customer login & license (${newRecord.licenseKey}) for ${newRecord.customerEmail}!`
+      `Created ${newLicBillingCycle} customer license (${newRecord.licenseKey}) for ${newRecord.customerEmail}!`
     );
   };
 
@@ -346,7 +368,6 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
     };
     onSaveRazorpayConfig(nextConfig);
 
-    // Also sync to local-panel-api backend if available
     try {
       await fetch('/api/v1/license-store/upi-settings', {
         method: 'POST',
@@ -399,20 +420,21 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                 colors={['#7C3AED', '#4F46E5', '#2563EB', '#7C3AED']}
                 className="text-xs font-bold"
               >
-                Plans, Pricing, Account Quotas &amp; Razorpay Gateway
+                Monthly &amp; Yearly Plans, Account Quotas &amp; Razorpay Gateway
               </GradientText>
             </div>
 
             <h1 className="font-display text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
               <BlurText
-                text="Control Store Plans, Monthly Pricing (₹), Account Limits & Razorpay Credentials."
+                text="Control Monthly & Yearly Pricing (₹), cPanel Account Limits & Razorpay Keys."
                 delayMs={25}
               />
             </h1>
 
             <p className="max-w-2xl text-xs leading-relaxed text-slate-600 sm:text-sm">
-              Manage your public license store plans, set how many cPanel accounts each plan can
-              create, manage customer logins, and configure your <strong>Razorpay Key ID &amp; Key Secret</strong>.
+              Set both <strong>Monthly Price (₹/mo)</strong> and{' '}
+              <strong>Yearly Price (₹/yr)</strong> for every plan, control how many cPanel accounts
+              each plan can create, and configure your <strong>Razorpay Key ID &amp; Key Secret</strong>.
             </p>
           </div>
 
@@ -445,7 +467,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
             <CountUp to={plans.length} suffix=" Plans" />
           </div>
           <p className="mt-1 text-xs font-semibold text-indigo-700">
-            Live on Public Home Page (`/`)
+            Monthly + Yearly Billing Enabled
           </p>
         </SpotlightCard>
 
@@ -462,9 +484,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
               suffix={` / ${customerLicenses.length}`}
             />
           </div>
-          <p className="mt-1 text-xs font-semibold text-emerald-700">
-            Active Customer Logins
-          </p>
+          <p className="mt-1 text-xs font-semibold text-emerald-700">Active Customer Logins</p>
         </SpotlightCard>
 
         <SpotlightCard className="p-5">
@@ -475,9 +495,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
             <CreditCard className="h-5 w-5 text-emerald-600" />
           </div>
           <div className="mt-2 font-display text-xl font-extrabold text-slate-900">
-            {razorpayConfig.keyId
-              ? `${razorpayConfig.mode} MODE ACTIVE`
-              : 'Key ID Not Set'}
+            {razorpayConfig.keyId ? `${razorpayConfig.mode} MODE ACTIVE` : 'Key ID Not Set'}
           </div>
           <p className="mt-1 truncate font-mono text-xs font-semibold text-indigo-700">
             {razorpayConfig.keyId || 'Click Tab 3 to enter Razorpay Key ID'}
@@ -494,9 +512,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
           <div className="mt-2 font-display text-3xl font-extrabold text-slate-900">
             ₹{monthlyRecurringRevenue.toLocaleString('en-IN')}
           </div>
-          <p className="mt-1 text-xs font-semibold text-slate-500">
-             Primary VPS: 200.234.39.100
-          </p>
+          <p className="mt-1 text-xs font-semibold text-slate-500">Primary VPS: 200.234.39.100</p>
         </SpotlightCard>
       </div>
 
@@ -512,7 +528,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                 : 'bg-white text-slate-600 hover:bg-indigo-50'
             }`}
           >
-            <Layers className="h-4 w-4" /> 1. Plans, Pricing &amp; Account Limits ({plans.length})
+            <Layers className="h-4 w-4" /> 1. Plans, Monthly/Yearly Pricing &amp; Limits ({plans.length})
           </button>
           <button
             type="button"
@@ -562,7 +578,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
       </div>
 
       {/* ========================================================================
-          TAB 1: LICENSE PLANS, PRICING & ACCOUNT LIMITS CONTROLLER
+          TAB 1: LICENSE PLANS, MONTHLY & YEARLY PRICING & ACCOUNT LIMITS
           ======================================================================== */}
       {activeTab === 'plans' && (
         <div className="space-y-6">
@@ -576,7 +592,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                       : `EDIT PLAN: ${editingCode}`}
                   </Badge>
                   <h2 className="mt-1 font-display text-lg font-extrabold text-slate-900">
-                    Configure Plan Name, Monthly Price (₹), Panel Mode &amp; cPanel Account Limit
+                    Configure Plan Name, Monthly Price (₹), Yearly Price (₹), Panel Mode &amp; Limit
                   </h2>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => setEditingCode(null)}>
@@ -585,7 +601,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
               </div>
 
               <form onSubmit={handleSavePlanForm} className="mt-4 space-y-4">
-                <div className="grid gap-4 sm:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-4">
                   <div>
                     <label className="mb-1 block text-xs font-bold text-slate-700">
                       Plan Name (Displayed on Home Page)
@@ -601,7 +617,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-bold text-slate-700">
-                      Monthly Price (₹ INR / Month)
+                      Monthly Price (₹ / Month)
                     </label>
                     <Input
                       type="number"
@@ -615,7 +631,21 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-bold text-slate-700">
-                      Panel Access Mode After Customer Login
+                      Yearly Price (₹ / Year)
+                    </label>
+                    <Input
+                      type="number"
+                      min={1}
+                      required
+                      value={formYearlyInr}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setFormYearlyInr(Number(e.target.value))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-bold text-slate-700">
+                      Panel Access Mode After Login
                     </label>
                     <select
                       aria-label="Panel Access Mode After Customer Login"
@@ -635,7 +665,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                         ONLY cPanel (Direct Port 2083 · 1 Account Solo)
                       </option>
                       <option value="WHM_AND_CPANEL">
-                        WHM + cPanel (Port 2087 WHM + Multiple cPanel Accounts)
+                        WHM + cPanel (Port 2087 WHM + Multiple Accounts)
                       </option>
                     </select>
                   </div>
@@ -657,7 +687,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                     />
                     <span className="mt-1 block text-[11px] text-slate-500">
                       Enter <strong>0</strong> for Unlimited cPanel accounts, or any exact limit
-                      (e.g. 5, 10, 30, 50).
+                      (e.g. 5, 10, 20, 30).
                     </span>
                   </div>
 
@@ -734,9 +764,9 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                   </div>
 
                   <div className="text-right">
-                    <div className="font-display text-2xl font-extrabold text-indigo-700">
-                      ₹{plan.monthlyInr.toLocaleString('en-IN')}
-                      <span className="text-xs font-semibold text-slate-500">/mo</span>
+                    <div className="font-display text-xl font-extrabold text-indigo-700">
+                      ₹{plan.monthlyInr.toLocaleString('en-IN')}/mo · ₹
+                      {(plan.yearlyInr || plan.monthlyInr * 10).toLocaleString('en-IN')}/yr
                     </div>
                     <div className="text-[11px] font-bold text-slate-500">
                       Code: <span className="font-mono">{plan.code}</span>
@@ -744,11 +774,11 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                   </div>
                 </div>
 
-                {/* Instant Inline Controls for Price, Panel Mode & Max Accounts */}
-                <div className="grid gap-3 rounded-2xl border border-indigo-100 bg-[#FAF9FE] p-4 sm:grid-cols-3">
+                {/* Instant Inline Controls for Monthly Price, Yearly Price, Panel Mode & Max Accounts */}
+                <div className="grid gap-3 rounded-2xl border border-indigo-100 bg-[#FAF9FE] p-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
                     <label className="mb-1 block text-[11px] font-bold text-slate-600">
-                      Monthly Price (₹)
+                      Monthly Price (₹/mo)
                     </label>
                     <Input
                       type="number"
@@ -757,6 +787,22 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                         handleQuickUpdatePlan(plan.code, {
                           monthlyInr: Math.max(1, Number(e.target.value) || 0),
+                        })
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-[11px] font-bold text-slate-600">
+                      Yearly Price (₹/yr)
+                    </label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={plan.yearlyInr || plan.monthlyInr * 10}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        handleQuickUpdatePlan(plan.code, {
+                          yearlyInr: Math.max(1, Number(e.target.value) || 0),
                         })
                       }
                     />
@@ -774,7 +820,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                           panelMode: e.target.value as LicensePanelMode,
                         })
                       }
-                      className="h-10 w-full rounded-xl border border-indigo-100 bg-white px-2.5 text-xs font-bold text-slate-800"
+                      className="h-10 w-full rounded-xl border border-indigo-100 bg-white px-2 text-xs font-bold text-slate-800"
                     >
                       <option value="ONLY_CPANEL">cPanel Only (2083)</option>
                       <option value="WHM_AND_CPANEL">WHM + cPanel (2087)</option>
@@ -798,8 +844,8 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                     />
                     <span className="mt-0.5 block text-[10px] font-semibold text-indigo-700">
                       {plan.maxAccounts === 0
-                        ? '0 = Unlimited Accounts'
-                        : `Limit: ${plan.maxAccounts} Account(s)`}
+                        ? '0 = Unlimited'
+                        : `Limit: ${plan.maxAccounts} cP`}
                     </span>
                   </div>
                 </div>
@@ -846,7 +892,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
               Creates a customer account with Email + Password and binds an Ed25519 license key to
               their server IPv4.
             </p>
-            <form onSubmit={handleIssueManualLicense} className="mt-4 grid gap-3 sm:grid-cols-5">
+            <form onSubmit={handleIssueManualLicense} className="mt-4 grid gap-3 sm:grid-cols-6">
               <Input
                 required
                 type="email"
@@ -882,13 +928,23 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
               >
                 {plans.map((p) => (
                   <option key={p.code} value={p.code}>
-                    {p.name} (₹{p.monthlyInr}/mo ·{' '}
-                    {p.maxAccounts === 0 ? 'Unlimited' : p.maxAccounts} cP)
+                    {p.name} ({p.maxAccounts === 0 ? 'Unlimited' : p.maxAccounts} cP)
                   </option>
                 ))}
               </select>
+              <select
+                aria-label="Select Billing Cycle"
+                value={newLicBillingCycle}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  setNewLicBillingCycle(e.target.value as LicenseBillingCycle)
+                }
+                className="h-10 rounded-xl border border-indigo-100 bg-white px-3 text-xs font-bold text-slate-800"
+              >
+                <option value="MONTHLY">Monthly (30 Days)</option>
+                <option value="YEARLY">Yearly (365 Days)</option>
+              </select>
               <Button type="submit" variant="nebulix">
-                <Plus className="h-4 w-4" /> Create Customer License
+                <Plus className="h-4 w-4" /> Issue License
               </Button>
             </form>
           </SpotlightCard>
@@ -905,19 +961,23 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                       <Badge variant={lic.status === 'ACTIVE' ? 'success' : 'destructive'}>
                         {lic.status}
                       </Badge>
-                      <Badge variant="default">{lic.planName}</Badge>
+                      <Badge variant="default">
+                        {lic.planName} ({lic.billingCycle || 'MONTHLY'})
+                      </Badge>
                       <Badge variant="secondary">
                         {lic.panelMode === 'ONLY_CPANEL'
-                          ? 'Customer Login Opens: cPanel Only (Port 2083)'
-                          : `Customer Login Opens: WHM + cPanel (Max ${lic.maxAccounts === 0 ? 'Unlimited' : lic.maxAccounts} Accounts)`}
+                          ? 'Opens: cPanel Only (Port 2083)'
+                          : `Opens: WHM + cPanel (Max ${lic.maxAccounts === 0 ? 'Unlimited' : lic.maxAccounts} Accounts)`}
                       </Badge>
                     </div>
                     <div className="text-xs text-slate-600">
-                      Password: <code className="font-mono font-bold text-slate-800">{lic.password}</code>{' '}
-                      · License Key:{' '}
+                      Password:{' '}
+                      <code className="font-mono font-bold text-slate-800">{lic.password}</code> ·
+                      License Key:{' '}
                       <code className="font-mono font-bold text-indigo-700">{lic.licenseKey}</code>{' '}
                       · Bound Server IP:{' '}
                       <code className="font-mono font-bold text-slate-900">{lic.serverIp}</code>
+                      {lic.expiresAt ? ` · Valid Until: ${lic.expiresAt}` : ''}
                     </div>
                   </div>
 
@@ -987,8 +1047,8 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
               </h2>
               <p className="text-xs text-slate-500">
                 Enter your Razorpay Key ID and Key Secret from your Razorpay Dashboard
-                (Settings → API Keys). Customers buying a plan on the Home Page will pay through
-                this gateway.
+                (Settings → API Keys). Customers buying a Monthly or Yearly plan on the Home Page
+                will pay through this gateway.
               </p>
             </div>
             <Badge variant={rzpKeyId.startsWith('rzp_') ? 'success' : 'secondary'}>

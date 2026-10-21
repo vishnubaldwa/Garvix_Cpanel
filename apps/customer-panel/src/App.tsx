@@ -63,6 +63,7 @@ import {
   type IssuedCustomerLicenseRecord,
   type RazorpayGatewayConfig,
   type MasterAdminCredentials,
+  type LicenseBillingCycle,
 } from './components/dashboard/NebulixMasterAdmin.js';
 
 export type PanelSurface = 'store' | 'login' | 'cpanel' | 'whm' | 'admin';
@@ -90,6 +91,7 @@ export const DEFAULT_GARVIX_LICENSE_PLANS: GarvixLicensePlanConfig[] = [
     name: 'Garvix cPanel Solo',
     badge: '1 ACCOUNT · SOLO VPS',
     monthlyInr: 499,
+    yearlyInr: 4990,
     panelMode: 'ONLY_CPANEL',
     maxAccounts: 1,
     maxAccountsLabel: '1 cPanel Account (No WHM)',
@@ -107,6 +109,7 @@ export const DEFAULT_GARVIX_LICENSE_PLANS: GarvixLicensePlanConfig[] = [
     name: 'Garvix WHM Admin',
     badge: 'UP TO 5 ACCOUNTS',
     monthlyInr: 999,
+    yearlyInr: 9990,
     panelMode: 'WHM_AND_CPANEL',
     maxAccounts: 5,
     maxAccountsLabel: 'Up to 5 cPanel Accounts + WHM',
@@ -125,6 +128,7 @@ export const DEFAULT_GARVIX_LICENSE_PLANS: GarvixLicensePlanConfig[] = [
     name: 'Garvix WHM Pro',
     badge: 'UP TO 30 ACCOUNTS',
     monthlyInr: 1799,
+    yearlyInr: 17990,
     panelMode: 'WHM_AND_CPANEL',
     maxAccounts: 30,
     maxAccountsLabel: 'Up to 30 cPanel Accounts + WHM',
@@ -143,6 +147,7 @@ export const DEFAULT_GARVIX_LICENSE_PLANS: GarvixLicensePlanConfig[] = [
     name: 'Garvix WHM Premier',
     badge: 'UNLIMITED ACCOUNTS',
     monthlyInr: 2999,
+    yearlyInr: 29990,
     panelMode: 'WHM_AND_CPANEL',
     maxAccounts: 0,
     maxAccountsLabel: 'Unlimited cPanel Accounts + WHM',
@@ -167,11 +172,13 @@ export const DEFAULT_CUSTOMER_LICENSES: IssuedCustomerLicenseRecord[] = [
     planName: 'Garvix WHM Pro',
     panelMode: 'WHM_AND_CPANEL',
     maxAccounts: 30,
+    billingCycle: 'YEARLY',
     serverIp: '200.234.39.100',
     hostname: 'srv2075790.hstgr.cloud',
     licenseKey: 'GVX-WHM_PRO-94CF-2026-ED25519',
     status: 'ACTIVE',
     createdAt: '2026-10-20',
+    expiresAt: '2027-10-20',
   },
   {
     id: 'lic-solo-default',
@@ -181,11 +188,13 @@ export const DEFAULT_CUSTOMER_LICENSES: IssuedCustomerLicenseRecord[] = [
     planName: 'Garvix cPanel Solo',
     panelMode: 'ONLY_CPANEL',
     maxAccounts: 1,
+    billingCycle: 'MONTHLY',
     serverIp: '200.234.39.100',
     hostname: 'solo.garvixcloud.in',
     licenseKey: 'GVX-CPANEL_SOLO-31A8-2026-ED25519',
     status: 'ACTIVE',
     createdAt: '2026-10-20',
+    expiresAt: '2026-11-20',
   },
 ];
 
@@ -541,7 +550,15 @@ export function CustomerPanelApp(): React.ReactElement {
         const raw = window.localStorage.getItem(PLANS_STORAGE_KEY);
         if (raw) {
           const parsed = JSON.parse(raw) as GarvixLicensePlanConfig[];
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed.map((p) => ({
+              ...p,
+              yearlyInr:
+                typeof p.yearlyInr === 'number' && p.yearlyInr > 0
+                  ? p.yearlyInr
+                  : p.monthlyInr * 10,
+            }));
+          }
         }
       } catch {
         // ignore
@@ -814,8 +831,12 @@ export function CustomerPanelApp(): React.ReactElement {
   const [newDbUser, setNewDbUser] = React.useState<string>('crm_admin');
   const [newDbPass, setNewDbPass] = React.useState<string>('Db!9xP#4wL$8vK2');
 
-  // Public Store Checkout & Newly Purchased License state
+  // Public Store Billing Cycle Toggle & Checkout state
+  const [storeBillingCycle, setStoreBillingCycle] =
+    React.useState<LicenseBillingCycle>('MONTHLY');
   const [checkoutPlan, setCheckoutPlan] = React.useState<GarvixLicensePlanConfig | null>(null);
+  const [checkoutBillingCycle, setCheckoutBillingCycle] =
+    React.useState<LicenseBillingCycle>('MONTHLY');
   const [checkoutEmail, setCheckoutEmail] = React.useState<string>('');
   const [checkoutPassword, setCheckoutPassword] = React.useState<string>('');
   const [checkoutIp, setCheckoutIp] = React.useState<string>('200.234.39.100');
@@ -995,9 +1016,16 @@ export function CustomerPanelApp(): React.ReactElement {
     showToast('Let’s Encrypt AutoSSL TLS 1.3 certificate issued and reloaded in Nginx.');
   };
 
-  const finalizeLicenseIssuance = (plan: GarvixLicensePlanConfig) => {
+  const finalizeLicenseIssuance = (
+    plan: GarvixLicensePlanConfig,
+    billingCycle: LicenseBillingCycle
+  ) => {
     const rand = Math.random().toString(16).substring(2, 6).toUpperCase();
     const newKey = `GVX-${plan.code}-${rand}-2026-ED25519`;
+    const now = new Date();
+    const expiresDate = new Date(
+      now.getTime() + (billingCycle === 'YEARLY' ? 365 : 30) * 86_400_000
+    );
     const createdLicense: IssuedCustomerLicenseRecord = {
       id: `lic-${Date.now()}`,
       customerEmail: checkoutEmail.trim().toLowerCase(),
@@ -1006,11 +1034,13 @@ export function CustomerPanelApp(): React.ReactElement {
       planName: plan.name,
       panelMode: plan.panelMode,
       maxAccounts: plan.maxAccounts,
+      billingCycle,
       serverIp: checkoutIp.trim() || '200.234.39.100',
       hostname: 'srv2075790.hstgr.cloud',
       licenseKey: newKey,
       status: 'ACTIVE',
-      createdAt: new Date().toISOString().slice(0, 10),
+      createdAt: now.toISOString().slice(0, 10),
+      expiresAt: expiresDate.toISOString().slice(0, 10),
     };
 
     handleSaveCustomerLicenses([createdLicense, ...customerLicenses]);
@@ -1018,7 +1048,9 @@ export function CustomerPanelApp(): React.ReactElement {
     setLoginEmailInput(createdLicense.customerEmail);
     setCheckoutPlan(null);
     showToast(
-      `Payment verified! Issued ${createdLicense.planName} license (${newKey}) for ${createdLicense.customerEmail}.`
+      `Payment verified! Issued ${createdLicense.planName} (${
+        billingCycle === 'YEARLY' ? 'Yearly · 365 Days' : 'Monthly · 30 Days'
+      }) license (${newKey}) for ${createdLicense.customerEmail}.`
     );
   };
 
@@ -1026,7 +1058,11 @@ export function CustomerPanelApp(): React.ReactElement {
     e.preventDefault();
     if (!checkoutPlan || !checkoutEmail.trim() || !checkoutPassword.trim()) return;
 
-    const totalInrWithGst = Math.round(checkoutPlan.monthlyInr * 1.18);
+    const basePriceInr =
+      checkoutBillingCycle === 'YEARLY'
+        ? checkoutPlan.yearlyInr || checkoutPlan.monthlyInr * 10
+        : checkoutPlan.monthlyInr;
+    const totalInrWithGst = Math.round(basePriceInr * 1.18);
     const amountPaise = totalInrWithGst * 100;
 
     // If Owner has configured a Razorpay Key ID (`rzp_...`) in Master Admin, open the real Razorpay Checkout popup if available
@@ -1038,19 +1074,21 @@ export function CustomerPanelApp(): React.ReactElement {
         amount: amountPaise,
         currency: 'INR',
         name: razorpayConfig.companyName,
-        description: `${checkoutPlan.name} (${checkoutPlan.maxAccountsLabel})`,
+        description: `${checkoutPlan.name} (${
+          checkoutBillingCycle === 'YEARLY' ? 'Annual License' : 'Monthly License'
+        } · ${checkoutPlan.maxAccountsLabel})`,
         prefill: {
           email: checkoutEmail.trim(),
         },
         handler: () => {
-          finalizeLicenseIssuance(checkoutPlan);
+          finalizeLicenseIssuance(checkoutPlan, checkoutBillingCycle);
         },
       });
       rzpInstance.open();
       return;
     }
 
-    finalizeLicenseIssuance(checkoutPlan);
+    finalizeLicenseIssuance(checkoutPlan, checkoutBillingCycle);
   };
 
   // WHM Handlers
@@ -1573,9 +1611,9 @@ export function CustomerPanelApp(): React.ReactElement {
                   </SpotlightCard>
                 )}
 
-                {/* License Plans Grid */}
-                <div className="space-y-4">
-                  <div className="flex flex-wrap items-end justify-between gap-2">
+                {/* License Plans Grid with Monthly vs Yearly Toggle */}
+                <div className="space-y-5">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
                       <h2 className="font-display text-xl font-extrabold text-slate-900">
                         Select Your Server License Plan
@@ -1584,68 +1622,146 @@ export function CustomerPanelApp(): React.ReactElement {
                         Instant Ed25519 license activation with 1-line AlmaLinux 10 installer.
                       </p>
                     </div>
-                    <Badge variant="secondary">Razorpay &amp; UPI Instant Activation</Badge>
+
+                    {/* Monthly vs Yearly Billing Cycle Toggle Switch */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="inline-flex items-center rounded-2xl border border-indigo-200 bg-white p-1 shadow-xs">
+                        <button
+                          type="button"
+                          onClick={() => setStoreBillingCycle('MONTHLY')}
+                          className={`rounded-xl px-4 py-2 text-xs font-extrabold transition-all ${
+                            storeBillingCycle === 'MONTHLY'
+                              ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-indigo-900'
+                          }`}
+                        >
+                          Monthly Billing
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStoreBillingCycle('YEARLY')}
+                          className={`flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-extrabold transition-all ${
+                            storeBillingCycle === 'YEARLY'
+                              ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-indigo-900'
+                          }`}
+                        >
+                          <span>Yearly Billing</span>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+                              storeBillingCycle === 'YEARLY'
+                                ? 'bg-emerald-400 text-slate-950'
+                                : 'bg-emerald-100 text-emerald-800'
+                            }`}
+                          >
+                            Save 2 Months Free ⚡
+                          </span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                    {licensePlans.map((plan) => (
-                      <TiltedCard key={plan.code} maxTiltDeg={3}>
-                        <StarBorder
-                          color={plan.popular ? '#6366F1' : '#C7D2FE'}
-                          className="h-full"
-                        >
-                          <div className="flex h-full flex-col justify-between rounded-[15px] bg-white p-5">
-                            <div>
-                              <div className="flex items-center justify-between gap-1">
-                                <Badge variant={plan.popular ? 'orange' : 'secondary'}>
-                                  {plan.badge}
-                                </Badge>
-                                {plan.popular && (
-                                  <span className="text-[10px] font-extrabold uppercase text-indigo-600">
-                                    ★ Popular
-                                  </span>
+                    {licensePlans.map((plan) => {
+                      const yearlyPrice = plan.yearlyInr || plan.monthlyInr * 10;
+                      const annualSavingsInr = Math.max(0, plan.monthlyInr * 12 - yearlyPrice);
+                      const effectiveMonthlyInr = Math.round(yearlyPrice / 12);
+
+                      return (
+                        <TiltedCard key={plan.code} maxTiltDeg={3}>
+                          <StarBorder
+                            color={plan.popular ? '#6366F1' : '#C7D2FE'}
+                            className="h-full"
+                          >
+                            <div className="flex h-full flex-col justify-between rounded-[15px] bg-white p-5">
+                              <div>
+                                <div className="flex items-center justify-between gap-1">
+                                  <Badge variant={plan.popular ? 'orange' : 'secondary'}>
+                                    {plan.badge}
+                                  </Badge>
+                                  {plan.popular && (
+                                    <span className="text-[10px] font-extrabold uppercase text-indigo-600">
+                                      ★ Popular
+                                    </span>
+                                  )}
+                                </div>
+
+                                <h3 className="mt-3 font-display text-lg font-extrabold text-slate-900">
+                                  {plan.name}
+                                </h3>
+                                <p className="mt-0.5 text-[11px] text-slate-500">{plan.bestFor}</p>
+
+                                {storeBillingCycle === 'MONTHLY' ? (
+                                  <div className="mt-3">
+                                    <div className="font-display text-3xl font-extrabold text-slate-900">
+                                      ₹{plan.monthlyInr.toLocaleString('en-IN')}
+                                      <span className="text-xs font-medium text-slate-500">
+                                        {' '}
+                                        / month
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => setStoreBillingCycle('YEARLY')}
+                                      className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:underline"
+                                    >
+                                      or ₹{yearlyPrice.toLocaleString('en-IN')}/year (Save ₹
+                                      {annualSavingsInr.toLocaleString('en-IN')}) →
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="mt-3">
+                                    <div className="font-display text-3xl font-extrabold text-slate-900">
+                                      ₹{yearlyPrice.toLocaleString('en-IN')}
+                                      <span className="text-xs font-medium text-slate-500">
+                                        {' '}
+                                        / year
+                                      </span>
+                                    </div>
+                                    <div className="mt-1 inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-800">
+                                      <span>
+                                        Effective ₹{effectiveMonthlyInr.toLocaleString('en-IN')}/mo
+                                      </span>
+                                      {annualSavingsInr > 0 && (
+                                        <span>
+                                          · Save ₹{annualSavingsInr.toLocaleString('en-IN')}/yr
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
                                 )}
+
+                                <div className="mt-2.5 rounded-xl border border-indigo-100 bg-indigo-50/70 px-3 py-2 text-xs font-bold text-indigo-800">
+                                  {plan.maxAccountsLabel}
+                                </div>
+
+                                <ul className="mt-4 space-y-2 border-t border-slate-100 pt-3 text-xs text-slate-600">
+                                  {plan.features.map((feat) => (
+                                    <li key={feat} className="flex items-start gap-2">
+                                      <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                                      <span>{feat}</span>
+                                    </li>
+                                  ))}
+                                </ul>
                               </div>
 
-                              <h3 className="mt-3 font-display text-lg font-extrabold text-slate-900">
-                                {plan.name}
-                              </h3>
-                              <p className="mt-0.5 text-[11px] text-slate-500">{plan.bestFor}</p>
-
-                              <div className="mt-3 font-display text-3xl font-extrabold text-slate-900">
-                                ₹{plan.monthlyInr.toLocaleString('en-IN')}
-                                <span className="text-xs font-medium text-slate-500">
-                                  {' '}
-                                  / month
-                                </span>
-                              </div>
-
-                              <div className="mt-2 rounded-xl border border-indigo-100 bg-indigo-50/70 px-3 py-2 text-xs font-bold text-indigo-800">
-                                {plan.maxAccountsLabel}
-                              </div>
-
-                              <ul className="mt-4 space-y-2 border-t border-slate-100 pt-3 text-xs text-slate-600">
-                                {plan.features.map((feat) => (
-                                  <li key={feat} className="flex items-start gap-2">
-                                    <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                                    <span>{feat}</span>
-                                  </li>
-                                ))}
-                              </ul>
+                              <Button
+                                variant={plan.popular ? 'nebulix' : 'outline'}
+                                className="mt-6 w-full"
+                                onClick={() => {
+                                  setCheckoutBillingCycle(storeBillingCycle);
+                                  setCheckoutPlan(plan);
+                                }}
+                              >
+                                <CreditCard className="h-4 w-4" />
+                                Buy {plan.name} (
+                                {storeBillingCycle === 'YEARLY' ? 'Yearly' : 'Monthly'})
+                              </Button>
                             </div>
-
-                            <Button
-                              variant={plan.popular ? 'nebulix' : 'outline'}
-                              className="mt-6 w-full"
-                              onClick={() => setCheckoutPlan(plan)}
-                            >
-                              <CreditCard className="h-4 w-4" />
-                              Buy {plan.name}
-                            </Button>
-                          </div>
-                        </StarBorder>
-                      </TiltedCard>
-                    ))}
+                          </StarBorder>
+                        </TiltedCard>
+                      );
+                    })}
                   </div>
                 </div>
               </AnimatedContent>
@@ -2258,27 +2374,98 @@ export function CustomerPanelApp(): React.ReactElement {
         onClose={() => setCheckoutPlan(null)}
         title={
           checkoutPlan
-            ? `Buy ${checkoutPlan.name} (₹${checkoutPlan.monthlyInr}/mo)`
+            ? `Buy ${checkoutPlan.name} (${
+                checkoutBillingCycle === 'YEARLY'
+                  ? `₹${(checkoutPlan.yearlyInr || checkoutPlan.monthlyInr * 10).toLocaleString('en-IN')}/year`
+                  : `₹${checkoutPlan.monthlyInr.toLocaleString('en-IN')}/month`
+              })`
             : 'Buy Garvix Software License'
         }
-        description="Create your login credentials, bind your server IPv4, and complete payment via Razorpay / UPI."
+        description="Select Monthly or Yearly billing, create your login credentials, bind your server IPv4, and complete payment via Razorpay / UPI."
       >
         <form onSubmit={handleRazorpayCheckoutSubmit} className="space-y-4">
           {checkoutPlan && (
-            <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-3 text-xs space-y-1">
-              <div className="font-bold text-indigo-950">
-                Plan: {checkoutPlan.name} — ₹{checkoutPlan.monthlyInr}/month (+18% GST = ₹
-                {Math.round(checkoutPlan.monthlyInr * 1.18)})
+            <>
+              {/* Billing Cycle Selector inside Checkout Modal */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700">
+                  Select Billing Cycle
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutBillingCycle('MONTHLY')}
+                    className={`rounded-xl border p-3 text-left transition-all ${
+                      checkoutBillingCycle === 'MONTHLY'
+                        ? 'border-indigo-600 bg-indigo-50/90 ring-2 ring-indigo-500/20'
+                        : 'border-slate-200 bg-white hover:border-indigo-200'
+                    }`}
+                  >
+                    <div className="text-xs font-extrabold text-slate-900">Monthly Plan</div>
+                    <div className="mt-0.5 font-display text-base font-extrabold text-indigo-700">
+                      ₹{checkoutPlan.monthlyInr.toLocaleString('en-IN')}{' '}
+                      <span className="text-[11px] font-medium text-slate-500">/ mo</span>
+                    </div>
+                    <div className="mt-0.5 text-[10px] font-semibold text-slate-500">
+                      30 Days License Validity
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutBillingCycle('YEARLY')}
+                    className={`rounded-xl border p-3 text-left transition-all ${
+                      checkoutBillingCycle === 'YEARLY'
+                        ? 'border-indigo-600 bg-indigo-50/90 ring-2 ring-indigo-500/20'
+                        : 'border-slate-200 bg-white hover:border-indigo-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-xs font-extrabold text-slate-900">Yearly Plan</span>
+                      <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-extrabold text-emerald-800">
+                        SAVE 2 MO
+                      </span>
+                    </div>
+                    <div className="mt-0.5 font-display text-base font-extrabold text-indigo-700">
+                      ₹
+                      {(checkoutPlan.yearlyInr || checkoutPlan.monthlyInr * 10).toLocaleString(
+                        'en-IN'
+                      )}{' '}
+                      <span className="text-[11px] font-medium text-slate-500">/ yr</span>
+                    </div>
+                    <div className="mt-0.5 text-[10px] font-semibold text-emerald-700">
+                      365 Days License Validity
+                    </div>
+                  </button>
+                </div>
               </div>
-              <div className="text-indigo-700">
-                {checkoutPlan.maxAccountsLabel} · Gateway:{' '}
-                <strong>
-                  {razorpayConfig.keyId
-                    ? `Razorpay (${razorpayConfig.mode}) · ${razorpayConfig.companyName}`
-                    : `UPI (${razorpayConfig.merchantUpiVpa})`}
-                </strong>
+
+              <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-3 text-xs space-y-1">
+                {(() => {
+                  const basePrice =
+                    checkoutBillingCycle === 'YEARLY'
+                      ? checkoutPlan.yearlyInr || checkoutPlan.monthlyInr * 10
+                      : checkoutPlan.monthlyInr;
+                  const totalGst = Math.round(basePrice * 1.18);
+                  return (
+                    <div className="font-bold text-indigo-950">
+                      Plan: {checkoutPlan.name} (
+                      {checkoutBillingCycle === 'YEARLY' ? 'Yearly · 365 Days' : 'Monthly · 30 Days'}
+                      ) — ₹{basePrice.toLocaleString('en-IN')} (+18% GST = ₹
+                      {totalGst.toLocaleString('en-IN')})
+                    </div>
+                  );
+                })()}
+                <div className="text-indigo-700">
+                  {checkoutPlan.maxAccountsLabel} · Gateway:{' '}
+                  <strong>
+                    {razorpayConfig.keyId
+                      ? `Razorpay (${razorpayConfig.mode}) · ${razorpayConfig.companyName}`
+                      : `UPI (${razorpayConfig.merchantUpiVpa})`}
+                  </strong>
+                </div>
               </div>
-            </div>
+            </>
           )}
 
           <div className="space-y-1.5">
@@ -2325,7 +2512,8 @@ export function CustomerPanelApp(): React.ReactElement {
             </Button>
             <Button type="submit" variant="nebulix">
               <CreditCard className="h-4 w-4" />
-              Pay &amp; Activate License
+              Pay &amp; Activate{' '}
+              {checkoutBillingCycle === 'YEARLY' ? 'Yearly' : 'Monthly'} License
             </Button>
           </div>
         </form>
