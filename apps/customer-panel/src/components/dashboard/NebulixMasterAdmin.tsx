@@ -17,6 +17,7 @@ import {
   Eye,
   EyeOff,
   Lock,
+  Globe,
 } from 'lucide-react';
 import {
   AnimatedContent,
@@ -70,9 +71,14 @@ export interface RazorpayGatewayConfig {
   keyId: string;
   keySecret: string;
   webhookSecret: string;
+  hasSecretConfigured?: boolean;
   merchantUpiVpa: string;
   companyName: string;
   companyGstin: string;
+  supportEmail?: string;
+  supportPhone?: string;
+  companyAddress?: string;
+  footerTagline?: string;
 }
 
 export interface MasterAdminCredentials {
@@ -92,6 +98,7 @@ export interface NebulixMasterAdminProps {
   onSaveAdminCredentials: (nextCreds: MasterAdminCredentials) => void;
   onOpenPublicStore: () => void;
   onShowToast: (msg: string) => void;
+  authToken?: string;
 }
 
 export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
@@ -106,9 +113,10 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
   onSaveAdminCredentials,
   onOpenPublicStore,
   onShowToast,
+  authToken,
 }) => {
   const [activeTab, setActiveTab] = React.useState<
-    'plans' | 'customers' | 'gateway' | 'security'
+    'plans' | 'customers' | 'gateway' | 'security' | 'ssl'
   >('plans');
 
   // Plan Editor / Creator State
@@ -131,7 +139,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
   const [newLicBillingCycle, setNewLicBillingCycle] =
     React.useState<LicenseBillingCycle>('MONTHLY');
 
-  // Razorpay & Payment Gateway Form State
+  // Razorpay, Payment Gateway & Footer Contact Form State
   const [rzpEnabled, setRzpEnabled] = React.useState<boolean>(razorpayConfig.enabled);
   const [rzpMode, setRzpMode] = React.useState<'TEST' | 'LIVE'>(razorpayConfig.mode);
   const [rzpKeyId, setRzpKeyId] = React.useState<string>(razorpayConfig.keyId);
@@ -144,6 +152,18 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
   );
   const [companyName, setCompanyName] = React.useState<string>(razorpayConfig.companyName);
   const [companyGstin, setCompanyGstin] = React.useState<string>(razorpayConfig.companyGstin);
+  const [supportEmail, setSupportEmail] = React.useState<string>(
+    razorpayConfig.supportEmail || 'support@garvixcloud.in'
+  );
+  const [supportPhone, setSupportPhone] = React.useState<string>(
+    razorpayConfig.supportPhone || '+91 98765 43210'
+  );
+  const [companyAddress, setCompanyAddress] = React.useState<string>(
+    razorpayConfig.companyAddress || 'India'
+  );
+  const [footerTagline, setFooterTagline] = React.useState<string>(
+    razorpayConfig.footerTagline || 'Made with ❤️ in India 🇮🇳'
+  );
   const [showKeySecret, setShowKeySecret] = React.useState<boolean>(false);
   const [showWebhookSecret, setShowWebhookSecret] = React.useState<boolean>(false);
 
@@ -153,6 +173,24 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
     adminCredentials.password
   );
   const [showAdminPass, setShowAdminPass] = React.useState<boolean>(false);
+
+  // Panel Hostname SSL Certificate Installer State
+  const [sslPanelDomain, setSslPanelDomain] = React.useState<string>('panel.garvixcloud.in');
+  const [sslAdminEmail, setSslAdminEmail] = React.useState<string>(
+    razorpayConfig.supportEmail || 'admin@garvixcloud.in'
+  );
+  const [sslMethod, setSslMethod] = React.useState<'LETS_ENCRYPT' | 'CUSTOM_PEM'>('LETS_ENCRYPT');
+  const [sslCustomCertPem, setSslCustomCertPem] = React.useState<string>('');
+  const [sslCustomKeyPem, setSslCustomKeyPem] = React.useState<string>('');
+  const [sslCustomCaBundle, setSslCustomCaBundle] = React.useState<string>('');
+  const [sslInstalling, setSslInstalling] = React.useState<boolean>(false);
+  const [sslInstalledInfo, setSslInstalledInfo] = React.useState<{
+    domain: string;
+    issuer: string;
+    method: string;
+    expiresAt: string;
+    installedAt: string;
+  } | null>(null);
 
   const computeAccountsLabel = (mode: LicensePanelMode, maxAccounts: number): string => {
     if (mode === 'ONLY_CPANEL' || maxAccounts === 1) {
@@ -362,9 +400,14 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
       keyId: rzpKeyId.trim(),
       keySecret: rzpKeySecret.trim(),
       webhookSecret: rzpWebhookSecret.trim(),
+      hasSecretConfigured: Boolean(rzpKeySecret.trim() || razorpayConfig.hasSecretConfigured),
       merchantUpiVpa: merchantUpiVpa.trim() || 'garvix@icici',
       companyName: companyName.trim() || 'Garvix Software Solutions Pvt Ltd',
       companyGstin: companyGstin.trim(),
+      supportEmail: supportEmail.trim() || 'support@garvixcloud.in',
+      supportPhone: supportPhone.trim() || '+91 98765 43210',
+      companyAddress: companyAddress.trim() || 'India',
+      footerTagline: footerTagline.trim() || 'Made with ❤️ in India 🇮🇳',
     };
     onSaveRazorpayConfig(nextConfig);
 
@@ -382,8 +425,62 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
     }
 
     onShowToast(
-      `Saved Razorpay (${nextConfig.mode} Mode · Key: ${nextConfig.keyId || 'UPI Only'}) & Payment Gateway credentials!`
+      `Saved Razorpay (${nextConfig.mode} Mode) & Website Footer details!`
     );
+  };
+
+  const handleInstallPanelSslSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanDomain = sslPanelDomain.trim().toLowerCase().replace(/^https?:\/\//, '');
+    if (!cleanDomain || !cleanDomain.includes('.')) {
+      onShowToast('Please enter a valid domain name (e.g. panel.yourdomain.com).');
+      return;
+    }
+    if (sslMethod === 'CUSTOM_PEM' && (!sslCustomCertPem.trim() || !sslCustomKeyPem.trim())) {
+      onShowToast('Please paste both your SSL Certificate (.crt) and Private Key (.key).');
+      return;
+    }
+
+    setSslInstalling(true);
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (authToken) {
+        headers.Authorization = `Bearer ${authToken}`;
+      }
+      const res = await fetch('/api/v1/garvix-portal/ssl/install', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          domain: cleanDomain,
+          email: sslAdminEmail.trim() || 'admin@garvixcloud.in',
+          method: sslMethod,
+          certificatePem: sslMethod === 'CUSTOM_PEM' ? sslCustomCertPem.trim() : undefined,
+          privateKeyPem: sslMethod === 'CUSTOM_PEM' ? sslCustomKeyPem.trim() : undefined,
+          caBundlePem: sslMethod === 'CUSTOM_PEM' ? sslCustomCaBundle.trim() : undefined,
+          isPanelHostname: true,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.success) {
+        onShowToast(json?.error?.message || 'Failed to install SSL certificate.');
+        setSslInstalling(false);
+        return;
+      }
+      setSslInstalledInfo({
+        domain: json.data.domain,
+        issuer: json.data.issuer,
+        method: json.data.method,
+        expiresAt: json.data.expiresAt,
+        installedAt: json.data.installedAt,
+      });
+      onShowToast(
+        `SSL Certificate (${json.data.issuer}) installed for https://${json.data.domain}!`
+      );
+    } catch {
+      onShowToast('Could not reach backend API for SSL installation.');
+    } finally {
+      setSslInstalling(false);
+    }
   };
 
   const handleSaveAdminCredsSubmit = (e: React.FormEvent) => {
@@ -550,7 +647,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                 : 'bg-white text-slate-600 hover:bg-indigo-50'
             }`}
           >
-            <CreditCard className="h-4 w-4" /> 3. Razorpay Credentials &amp; UPI Gateway
+            <CreditCard className="h-4 w-4" /> 3. Razorpay, UPI &amp; Footer Info
           </button>
           <button
             type="button"
@@ -562,6 +659,17 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
             }`}
           >
             <Lock className="h-4 w-4" /> 4. Master Admin Password
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('ssl')}
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
+              activeTab === 'ssl'
+                ? 'bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600 text-white shadow-sm'
+                : 'bg-white text-slate-600 hover:bg-indigo-50'
+            }`}
+          >
+            <Globe className="h-4 w-4" /> 5. Panel Domain &amp; SSL Certificate
           </button>
         </div>
 
@@ -1112,13 +1220,17 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
 
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-slate-700">
-                  Razorpay Key Secret (Confidential)
+                  Razorpay Key Secret (Confidential · Stored on Server Only)
                 </label>
                 <div className="flex items-center gap-2">
                   <Input
-                    required={rzpEnabled}
+                    required={rzpEnabled && !razorpayConfig.hasSecretConfigured}
                     type={showKeySecret ? 'text' : 'password'}
-                    placeholder="Enter Razorpay Key Secret"
+                    placeholder={
+                      razorpayConfig.hasSecretConfigured
+                        ? '•••••••••••••••• (Saved securely on server)'
+                        : 'Enter Razorpay Key Secret'
+                    }
                     value={rzpKeySecret}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                       setRzpKeySecret(e.target.value)
@@ -1186,7 +1298,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-bold text-slate-700">
-                  Merchant / Company Legal Name (On GST Invoices)
+                  Merchant / Company Legal Name (On GST Invoices &amp; Footer)
                 </label>
                 <Input
                   value={companyName}
@@ -1209,9 +1321,71 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
               </div>
             </div>
 
+            <div className="border-t border-indigo-100 pt-4">
+              <div className="mb-3 text-xs font-extrabold uppercase tracking-wider text-indigo-700">
+                Website Footer Contact Details &amp; Center Tagline
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+                    Support Email (Shown in Footer Contact Us)
+                  </label>
+                  <Input
+                    type="email"
+                    value={supportEmail}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setSupportEmail(e.target.value)
+                    }
+                    placeholder="support@garvixcloud.in"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+                    Support Phone / WhatsApp Number (Shown in Footer)
+                  </label>
+                  <Input
+                    value={supportPhone}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setSupportPhone(e.target.value)
+                    }
+                    placeholder="+91 98765 43210"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+                    Company Registered Office Address (Shown in Footer)
+                  </label>
+                  <Input
+                    value={companyAddress}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setCompanyAddress(e.target.value)
+                    }
+                    placeholder="Jaipur, Rajasthan, India"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+                    Footer Bottom Center Badge Text
+                  </label>
+                  <Input
+                    value={footerTagline}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setFooterTagline(e.target.value)
+                    }
+                    placeholder="Made with ❤️ in India 🇮🇳"
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="flex items-center justify-end gap-3 border-t border-indigo-100 pt-4">
               <Button type="submit" variant="nebulix">
-                <CheckCircle2 className="h-4 w-4" /> Save Razorpay &amp; Gateway Credentials
+                <CheckCircle2 className="h-4 w-4" /> Save Razorpay &amp; Footer Settings
               </Button>
             </div>
           </form>
@@ -1285,6 +1459,191 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
           </form>
         </SpotlightCard>
       )}
+
+      {/* ========================================================================
+          TAB 5: PANEL DOMAIN & SSL CERTIFICATE INSTALLER (AUTOSSL + CUSTOM PEM)
+          ======================================================================== */}
+      {activeTab === 'ssl' && (
+        <div className="mx-auto max-w-3xl space-y-6">
+          <SpotlightCard className="p-6 sm:p-8 space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-100 pb-4">
+              <div>
+                <Badge variant="default">HTTPS &amp; TLS 1.3 SECURITY</Badge>
+                <h2 className="mt-1 font-display text-xl font-extrabold text-slate-900">
+                  Install SSL Certificate for Main Panel Domain
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Point your domain&apos;s DNS <strong>A Record</strong> to{' '}
+                  <code className="font-mono font-bold text-indigo-700">200.234.39.100</code>, then
+                  issue a Free Let&apos;s Encrypt AutoSSL or upload your own Custom SSL Certificate
+                  (<code>.crt</code> + <code>.key</code>).
+                </p>
+              </div>
+              <Badge variant={sslInstalledInfo ? 'success' : 'secondary'}>
+                {sslInstalledInfo ? `HTTPS ACTIVE (${sslInstalledInfo.issuer})` : 'READY TO INSTALL'}
+              </Badge>
+            </div>
+
+            {sslInstalledInfo && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/90 p-4 text-xs text-emerald-900">
+                <div className="flex items-center justify-between font-bold">
+                  <span>
+                    🔒 Active SSL Certificate on{' '}
+                    <span className="font-mono underline">https://{sslInstalledInfo.domain}</span>
+                  </span>
+                  <span>Valid Until: {sslInstalledInfo.expiresAt}</span>
+                </div>
+                <div className="mt-1 text-[11px] text-emerald-800">
+                  Issuer: <strong>{sslInstalledInfo.issuer}</strong> · Method:{' '}
+                  <strong>{sslInstalledInfo.method}</strong> · Installed:{' '}
+                  {sslInstalledInfo.installedAt}
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleInstallPanelSslSubmit} className="space-y-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+                    Panel Domain / Hostname (Pointed to 200.234.39.100)
+                  </label>
+                  <Input
+                    required
+                    value={sslPanelDomain}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setSslPanelDomain(e.target.value)
+                    }
+                    placeholder="panel.yourdomain.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+                    SSL Notification &amp; Renewal Email
+                  </label>
+                  <Input
+                    required
+                    type="email"
+                    value={sslAdminEmail}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setSslAdminEmail(e.target.value)
+                    }
+                    placeholder="admin@yourdomain.com"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-slate-700">
+                  Select SSL Installation Method
+                </label>
+                <div className="grid grid-cols-2 gap-3 rounded-2xl border border-indigo-100 bg-[#FAF9FE] p-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setSslMethod('LETS_ENCRYPT')}
+                    className={`rounded-xl py-2.5 text-xs font-extrabold transition ${
+                      sslMethod === 'LETS_ENCRYPT'
+                        ? 'bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:text-indigo-700'
+                    }`}
+                  >
+                    1-Click Free Let&apos;s Encrypt AutoSSL
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSslMethod('CUSTOM_PEM')}
+                    className={`rounded-xl py-2.5 text-xs font-extrabold transition ${
+                      sslMethod === 'CUSTOM_PEM'
+                        ? 'bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:text-indigo-700'
+                    }`}
+                  >
+                    Upload Custom SSL (.crt + .key)
+                  </button>
+                </div>
+              </div>
+
+              {sslMethod === 'CUSTOM_PEM' ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-1 block text-xs font-bold text-slate-700">
+                      SSL Certificate (PEM / .crt)
+                    </label>
+                    <textarea
+                      required
+                      rows={4}
+                      value={sslCustomCertPem}
+                      onChange={(e) => setSslCustomCertPem(e.target.value)}
+                      placeholder="-----BEGIN CERTIFICATE-----&#10;MIIFazCCA1OgAwIBAgIRAII...&#10;-----END CERTIFICATE-----"
+                      className="w-full rounded-xl border border-indigo-100 bg-white p-3 font-mono text-xs text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-bold text-slate-700">
+                      Private Key (PEM / .key)
+                    </label>
+                    <textarea
+                      required
+                      rows={4}
+                      value={sslCustomKeyPem}
+                      onChange={(e) => setSslCustomKeyPem(e.target.value)}
+                      placeholder="-----BEGIN PRIVATE KEY-----&#10;MIIEvgIBADANBgkqhkiG9w0BAQE...&#10;-----END PRIVATE KEY-----"
+                      className="w-full rounded-xl border border-indigo-100 bg-white p-3 font-mono text-xs text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-bold text-slate-700">
+                      CA Bundle / Intermediate Chain (Optional)
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={sslCustomCaBundle}
+                      onChange={(e) => setSslCustomCaBundle(e.target.value)}
+                      placeholder="-----BEGIN CERTIFICATE-----&#10;..."
+                      className="w-full rounded-xl border border-indigo-100 bg-white p-3 font-mono text-xs text-slate-800"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4 text-xs text-slate-700 space-y-2">
+                  <div className="font-bold text-indigo-950">
+                    ⚡ Automatic Let&apos;s Encrypt ACME HTTP-01 Provisioning (90-Day Auto-Renew)
+                  </div>
+                  <p>
+                    Issues a trusted X.509 SSL certificate for{' '}
+                    <code className="font-mono font-bold text-indigo-700">
+                      {sslPanelDomain || 'panel.yourdomain.com'}
+                    </code>{' '}
+                    and configures TLS 1.2 / TLS 1.3 HTTPS redirect.
+                  </p>
+                  <div className="pt-1">
+                    <span className="block text-[11px] font-bold text-slate-600">
+                      Direct AlmaLinux 10 Root SSH Command (if running Certbot on host Nginx):
+                    </span>
+                    <code className="mt-1 block overflow-x-auto rounded-xl bg-slate-900 p-2.5 font-mono text-[11px] text-emerald-400">
+                      dnf install -y certbot python3-certbot-nginx &amp;&amp; certbot --nginx -d{' '}
+                      {sslPanelDomain.trim() || 'panel.yourdomain.com'} --non-interactive
+                      --agree-tos -m {sslAdminEmail.trim() || 'admin@garvixcloud.in'} --redirect
+                    </code>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end border-t border-indigo-100 pt-4">
+                <Button type="submit" variant="nebulix" disabled={sslInstalling}>
+                  <ShieldCheck className="h-4 w-4" />{' '}
+                  {sslInstalling
+                    ? 'Installing SSL Certificate...'
+                    : sslMethod === 'LETS_ENCRYPT'
+                      ? `Install Free Let's Encrypt SSL on ${sslPanelDomain || 'Domain'}`
+                      : `Install Custom SSL Certificate on ${sslPanelDomain || 'Domain'}`}
+                </Button>
+              </div>
+            </form>
+          </SpotlightCard>
+        </div>
+      )}
     </AnimatedContent>
   );
 };
+

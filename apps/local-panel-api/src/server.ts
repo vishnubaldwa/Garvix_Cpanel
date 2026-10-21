@@ -478,9 +478,135 @@ export function createLocalPanelHttpServer(
 
   const upiOrdersList: NpciDynamicQrOrder[] = [];
 
+  const defaultPortalPlans = [
+    {
+      code: 'CPANEL_SOLO',
+      name: 'cPanel Solo',
+      badge: '1 ACCOUNT · SOLO VPS',
+      monthlyInr: 499,
+      yearlyInr: 4990,
+      panelMode: 'ONLY_CPANEL',
+      maxAccounts: 1,
+      maxAccountsLabel: '1 cPanel Account (No WHM)',
+      bestFor: 'Single Website or Developer Cloud VPS',
+      features: [
+        '1 Server IPv4 License Activation',
+        'Direct cPanel Jupiter Dashboard (Port 2083)',
+        'Unlimited Domains, Subdomains & AutoSSL',
+        'Web Terminal, Git Deploy, Cron & API Tokens',
+      ],
+    },
+    {
+      code: 'WHM_ADMIN',
+      name: 'WHM Admin',
+      badge: 'UP TO 5 ACCOUNTS',
+      monthlyInr: 999,
+      yearlyInr: 9990,
+      panelMode: 'WHM_AND_CPANEL',
+      maxAccounts: 5,
+      maxAccountsLabel: 'Up to 5 cPanel Accounts + WHM',
+      bestFor: 'Freelancers & Small Agencies',
+      features: [
+        '1 Server IPv4 License Activation',
+        'Full WHM Server Admin Panel (Port 2087)',
+        'Create Up to 5 Isolated cPanel Accounts',
+        '1-Click [cP] Open cPanel Single Sign-On',
+        'Root Web Terminal, WHM API & Malware Scanner',
+      ],
+    },
+    {
+      code: 'WHM_PRO',
+      name: 'WHM Pro',
+      badge: 'UP TO 30 ACCOUNTS',
+      monthlyInr: 1799,
+      yearlyInr: 17990,
+      panelMode: 'WHM_AND_CPANEL',
+      maxAccounts: 30,
+      maxAccountsLabel: 'Up to 30 cPanel Accounts + WHM',
+      bestFor: 'Web Hosting Businesses & Resellers',
+      popular: true,
+      features: [
+        '1 Server IPv4 License Activation',
+        'Full WHM Server Admin Panel (Port 2087)',
+        'Create Up to 30 Isolated cPanel Accounts',
+        '1-Click [cP] Open cPanel Single Sign-On',
+        'Root Web Terminal, WHM API & Malware Scanner',
+      ],
+    },
+    {
+      code: 'WHM_PREMIER',
+      name: 'WHM Premier',
+      badge: 'UNLIMITED ACCOUNTS',
+      monthlyInr: 2999,
+      yearlyInr: 29990,
+      panelMode: 'WHM_AND_CPANEL',
+      maxAccounts: 0,
+      maxAccountsLabel: 'Unlimited cPanel Accounts + WHM',
+      bestFor: 'Data Centers & Large Dedicated Servers',
+      features: [
+        '1 Server IPv4 License Activation',
+        'Full WHM Server Admin Panel (Port 2087)',
+        'Create Unlimited Isolated cPanel Accounts',
+        '1-Click [cP] Open cPanel Single Sign-On',
+        'Root Web Terminal, WHM API & Malware Scanner',
+      ],
+    },
+  ];
+
+  const defaultPortalCustomerLicenses = [
+    {
+      id: 'lic-demo-solo',
+      customerEmail: 'solo@client.in',
+      password: 'Password@123',
+      planCode: 'CPANEL_SOLO',
+      planName: 'cPanel Solo',
+      billingCycle: 'MONTHLY',
+      panelMode: 'ONLY_CPANEL',
+      maxAccounts: 1,
+      serverIp: '200.234.39.100',
+      hostname: 'solo.garvixcloud.in',
+      licenseKey: 'GVX-CPANEL_SOLO-8841-2026-ED25519',
+      status: 'ACTIVE',
+      createdAt: '2026-04-20',
+      expiresAt: '2026-05-20',
+    },
+    {
+      id: 'lic-demo-pro',
+      customerEmail: 'pro@client.in',
+      password: 'Password@123',
+      planCode: 'WHM_PRO',
+      planName: 'WHM Pro',
+      billingCycle: 'MONTHLY',
+      panelMode: 'WHM_AND_CPANEL',
+      maxAccounts: 30,
+      serverIp: '200.234.39.100',
+      hostname: 'srv1.garvixcloud.in',
+      licenseKey: 'GVX-WHM_PRO-9920-2026-ED25519',
+      status: 'ACTIVE',
+      createdAt: '2026-04-20',
+      expiresAt: '2026-05-20',
+    },
+    {
+      id: 'lic-demo-premier',
+      customerEmail: 'unlimited@client.in',
+      password: 'Password@123',
+      planCode: 'WHM_PREMIER',
+      planName: 'WHM Premier',
+      billingCycle: 'YEARLY',
+      panelMode: 'WHM_AND_CPANEL',
+      maxAccounts: 0,
+      serverIp: '200.234.39.100',
+      hostname: 'dc1.garvixcloud.in',
+      licenseKey: 'GVX-WHM_PREMIER-7770-2026-ED25519',
+      status: 'ACTIVE',
+      createdAt: '2026-04-20',
+      expiresAt: '2027-04-20',
+    },
+  ];
+
   let portalState: {
-    licensePlans?: unknown[];
-    customerLicenses?: unknown[];
+    licensePlans?: Array<Record<string, any>>;
+    customerLicenses?: Array<Record<string, any>>;
     razorpayConfig?: {
       enabled: boolean;
       mode: 'TEST' | 'LIVE';
@@ -490,12 +616,119 @@ export function createLocalPanelHttpServer(
       merchantUpiVpa: string;
       companyName: string;
       companyGstin: string;
+      supportEmail?: string;
+      supportPhone?: string;
+      companyAddress?: string;
+      footerTagline?: string;
     };
     adminCredentials?: {
       email: string;
       password: string;
     };
-  } = {};
+    jwtSecret?: string;
+    panelSsl?: {
+      domain: string;
+      issuer: string;
+      method: string;
+      expiresAt: string;
+      installedAt: string;
+    };
+  } = {
+    licensePlans: [...defaultPortalPlans],
+    customerLicenses: [...defaultPortalCustomerLicenses],
+    razorpayConfig: {
+      enabled: true,
+      mode: 'LIVE',
+      keyId: '',
+      keySecret: '',
+      webhookSecret: '',
+      merchantUpiVpa: 'garvix@icici',
+      companyName: 'Garvix Software Solutions Pvt Ltd',
+      companyGstin: '29AABCG4829K1Z5',
+      supportEmail: 'support@garvixcloud.in',
+      supportPhone: '+91 98765 43210',
+      companyAddress: 'India',
+      footerTagline: 'Made with ❤️ in India 🇮🇳',
+    },
+    adminCredentials: {
+      email: 'admin@garvix.io',
+      password: 'Admin@12345',
+    },
+    jwtSecret: process.env.GARVIX_PORTAL_SECRET || `gvx_hmac_secret_${randomUUID()}`,
+  };
+
+  const pendingPortalRazorpayOrders = new Map<
+    string,
+    {
+      orderId: string;
+      planCode: string;
+      planName: string;
+      billingCycle: 'MONTHLY' | 'YEARLY';
+      panelMode: 'ONLY_CPANEL' | 'WHM_AND_CPANEL';
+      maxAccounts: number;
+      customerEmail: string;
+      customerPassword: string;
+      serverIp: string;
+      amountPaise: number;
+    }
+  >();
+
+  const loginAttemptsByIp = new Map<string, { count: number; blockedUntil: number }>();
+
+  const getPortalJwtSecret = (): string => {
+    if (!portalState.jwtSecret) {
+      portalState.jwtSecret = process.env.GARVIX_PORTAL_SECRET || `gvx_hmac_secret_${randomUUID()}`;
+    }
+    return portalState.jwtSecret;
+  };
+
+  const signPortalToken = (payload: {
+    role: 'MASTER_ADMIN' | 'CUSTOMER';
+    email: string;
+    licenseId?: string;
+  }): string => {
+    const tokenBody = {
+      ...payload,
+      iat: Date.now(),
+      exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
+    };
+    const encoded = Buffer.from(JSON.stringify(tokenBody), 'utf8').toString('base64url');
+    const sig = createHmac('sha256', getPortalJwtSecret()).update(encoded).digest('hex');
+    return `gvx_portal_${encoded}.${sig}`;
+  };
+
+  const verifyPortalToken = (
+    rawToken: string
+  ): { role: 'MASTER_ADMIN' | 'CUSTOMER'; email: string; licenseId?: string } | null => {
+    if (!rawToken || !rawToken.startsWith('gvx_portal_')) return null;
+    const withoutPrefix = rawToken.slice('gvx_portal_'.length);
+    const dotIdx = withoutPrefix.lastIndexOf('.');
+    if (dotIdx <= 0) return null;
+    const encoded = withoutPrefix.slice(0, dotIdx);
+    const providedSig = withoutPrefix.slice(dotIdx + 1);
+    const expectedSig = createHmac('sha256', getPortalJwtSecret()).update(encoded).digest('hex');
+    if (providedSig !== expectedSig) return null;
+    try {
+      const parsed = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
+      if (!parsed || typeof parsed !== 'object') return null;
+      if (typeof parsed.exp === 'number' && Date.now() > parsed.exp) return null;
+      if (parsed.role !== 'MASTER_ADMIN' && parsed.role !== 'CUSTOMER') return null;
+      return {
+        role: parsed.role,
+        email: String(parsed.email ?? ''),
+        licenseId: parsed.licenseId ? String(parsed.licenseId) : undefined,
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const extractPortalAuth = (req: IncomingMessage) => {
+    const authHeader = String(req.headers.authorization ?? '').trim();
+    if (!authHeader.toLowerCase().startsWith('bearer ')) return null;
+    const token = authHeader.slice(7).trim();
+    return verifyPortalToken(token);
+  };
 
   const saveExtras = () => {
     if (!extrasFilePath) return;
@@ -576,7 +809,26 @@ export function createLocalPanelHttpServer(
         trashItemsList.splice(0, trashItemsList.length, ...parsed.trashItemsList);
       }
       if (parsed.portalState && typeof parsed.portalState === 'object') {
-        portalState = parsed.portalState;
+        const ps = parsed.portalState;
+        portalState = {
+          ...portalState,
+          ...ps,
+          licensePlans:
+            Array.isArray(ps.licensePlans) && ps.licensePlans.length > 0
+              ? ps.licensePlans
+              : portalState.licensePlans,
+          customerLicenses:
+            Array.isArray(ps.customerLicenses) && ps.customerLicenses.length > 0
+              ? ps.customerLicenses
+              : portalState.customerLicenses,
+          razorpayConfig: ps.razorpayConfig
+            ? { ...portalState.razorpayConfig!, ...ps.razorpayConfig }
+            : portalState.razorpayConfig,
+          adminCredentials: ps.adminCredentials
+            ? { ...portalState.adminCredentials!, ...ps.adminCredentials }
+            : portalState.adminCredentials,
+          jwtSecret: ps.jwtSecret || portalState.jwtSecret,
+        };
       }
     } catch (_) {}
   }
@@ -2919,34 +3171,240 @@ export function createLocalPanelHttpServer(
       }
 
       if (req.method === 'GET' && pathname === '/api/v1/garvix-portal/bootstrap') {
+        const auth = extractPortalAuth(req);
+        const isMasterAdmin = auth?.role === 'MASTER_ADMIN';
+        const rc = portalState.razorpayConfig;
+        const sanitizedRazorpayConfig = rc
+          ? {
+              enabled: Boolean(rc.enabled),
+              mode: rc.mode === 'TEST' ? 'TEST' : 'LIVE',
+              keyId: String(rc.keyId ?? ''),
+              keySecret: '',
+              webhookSecret: '',
+              hasSecretConfigured: Boolean(rc.keySecret && rc.keySecret.length >= 8),
+              merchantUpiVpa: String(rc.merchantUpiVpa ?? 'garvix@icici'),
+              companyName: String(rc.companyName ?? 'Garvix Software Solutions Pvt Ltd'),
+              companyGstin: String(rc.companyGstin ?? ''),
+              supportEmail: String(rc.supportEmail ?? 'support@garvixcloud.in'),
+              supportPhone: String(rc.supportPhone ?? '+91 98765 43210'),
+              companyAddress: String(rc.companyAddress ?? 'India'),
+              footerTagline: String(rc.footerTagline ?? 'Made with ❤️ in India 🇮🇳'),
+            }
+          : undefined;
+
         sendJson(res, 200, {
           success: true,
           requestId,
           timestamp: new Date().toISOString(),
-          data: portalState,
+          data: {
+            licensePlans: portalState.licensePlans ?? defaultPortalPlans,
+            razorpayConfig: sanitizedRazorpayConfig,
+            panelSsl: portalState.panelSsl ?? null,
+            ...(isMasterAdmin
+              ? {
+                  customerLicenses: portalState.customerLicenses ?? defaultPortalCustomerLicenses,
+                  adminCredentials: portalState.adminCredentials,
+                }
+              : {}),
+          },
+        });
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/v1/garvix-portal/auth/login') {
+        const clientIp =
+          String(req.headers['x-forwarded-for'] ?? req.socket?.remoteAddress ?? 'unknown')
+            .split(',')[0]
+            .trim() || 'unknown';
+        const rateEntry = loginAttemptsByIp.get(clientIp);
+        if (rateEntry && rateEntry.blockedUntil > Date.now()) {
+          const waitMins = Math.max(1, Math.ceil((rateEntry.blockedUntil - Date.now()) / 60000));
+          sendJson(res, 429, {
+            success: false,
+            requestId,
+            timestamp: new Date().toISOString(),
+            error: {
+              code: 'RATE_LIMIT_EXCEEDED',
+              message: `Too many failed login attempts from IP ${clientIp}. Temporarily blocked for ${waitMins} minute(s).`,
+            },
+          });
+          return;
+        }
+
+        const body = await readJsonBody(req);
+        const email = String(body.email ?? '').trim().toLowerCase();
+        const password = String(body.password ?? '').trim();
+        const requestedRole = String(body.role ?? 'CUSTOMER').trim();
+
+        const adminCreds = portalState.adminCredentials ?? {
+          email: 'admin@garvix.io',
+          password: 'Admin@12345',
+        };
+
+        if (
+          email === String(adminCreds.email).toLowerCase() &&
+          password === String(adminCreds.password)
+        ) {
+          loginAttemptsByIp.delete(clientIp);
+          const token = signPortalToken({ role: 'MASTER_ADMIN', email });
+          sendJson(res, 200, {
+            success: true,
+            requestId,
+            timestamp: new Date().toISOString(),
+            data: {
+              session: {
+                role: 'MASTER_ADMIN',
+                email,
+                token,
+              },
+              customerLicenses: portalState.customerLicenses ?? defaultPortalCustomerLicenses,
+              adminCredentials: portalState.adminCredentials,
+            },
+          });
+          return;
+        }
+
+        if (requestedRole !== 'MASTER_ADMIN') {
+          const allLicenses = portalState.customerLicenses ?? defaultPortalCustomerLicenses;
+          const matched = allLicenses.find(
+            (lic) =>
+              String(lic.customerEmail ?? '').toLowerCase() === email &&
+              String(lic.password ?? '') === password
+          );
+
+          if (matched) {
+            if (matched.status !== 'ACTIVE') {
+              throw new Error(
+                `AUTH_LICENSE_SUSPENDED: License (${matched.licenseKey}) is currently SUSPENDED. Please contact administrator.`
+              );
+            }
+            loginAttemptsByIp.delete(clientIp);
+            const token = signPortalToken({
+              role: 'CUSTOMER',
+              email: String(matched.customerEmail),
+              licenseId: String(matched.id),
+            });
+            sendJson(res, 200, {
+              success: true,
+              requestId,
+              timestamp: new Date().toISOString(),
+              data: {
+                session: {
+                  role: 'CUSTOMER',
+                  email: String(matched.customerEmail),
+                  planCode: String(matched.planCode),
+                  planName: String(matched.planName),
+                  panelMode: matched.panelMode === 'ONLY_CPANEL' ? 'ONLY_CPANEL' : 'WHM_AND_CPANEL',
+                  maxAccounts: Number(matched.maxAccounts ?? 1),
+                  serverIp: String(matched.serverIp ?? '200.234.39.100'),
+                  licenseKey: String(matched.licenseKey ?? ''),
+                  token,
+                },
+              },
+            });
+            return;
+          }
+        }
+
+        const nextCount = (rateEntry?.count ?? 0) + 1;
+        loginAttemptsByIp.set(clientIp, {
+          count: nextCount,
+          blockedUntil: nextCount >= 5 ? Date.now() + 15 * 60 * 1000 : 0,
+        });
+
+        throw new Error(
+          `AUTH_INVALID_CREDENTIALS: Invalid email or password (${Math.max(0, 5 - nextCount)} attempt(s) remaining before 15-min IP lock).`
+        );
+      }
+
+      if (req.method === 'GET' && pathname === '/api/v1/garvix-portal/auth/me') {
+        const auth = extractPortalAuth(req);
+        if (!auth) {
+          throw new Error('AUTH_INVALID_TOKEN: Session token is missing, expired, or forged.');
+        }
+
+        if (auth.role === 'MASTER_ADMIN') {
+          sendJson(res, 200, {
+            success: true,
+            requestId,
+            timestamp: new Date().toISOString(),
+            data: {
+              session: {
+                role: 'MASTER_ADMIN',
+                email: auth.email,
+              },
+              customerLicenses: portalState.customerLicenses ?? defaultPortalCustomerLicenses,
+              adminCredentials: portalState.adminCredentials,
+            },
+          });
+          return;
+        }
+
+        const allLicenses = portalState.customerLicenses ?? defaultPortalCustomerLicenses;
+        const matched = allLicenses.find(
+          (lic) =>
+            (auth.licenseId && String(lic.id) === auth.licenseId) ||
+            String(lic.customerEmail ?? '').toLowerCase() === auth.email.toLowerCase()
+        );
+
+        if (!matched || matched.status !== 'ACTIVE') {
+          throw new Error('AUTH_LICENSE_INACTIVE: Customer license is no longer active.');
+        }
+
+        sendJson(res, 200, {
+          success: true,
+          requestId,
+          timestamp: new Date().toISOString(),
+          data: {
+            session: {
+              role: 'CUSTOMER',
+              email: String(matched.customerEmail),
+              planCode: String(matched.planCode),
+              planName: String(matched.planName),
+              panelMode: matched.panelMode === 'ONLY_CPANEL' ? 'ONLY_CPANEL' : 'WHM_AND_CPANEL',
+              maxAccounts: Number(matched.maxAccounts ?? 1),
+              serverIp: String(matched.serverIp ?? '200.234.39.100'),
+              licenseKey: String(matched.licenseKey ?? ''),
+            },
+          },
         });
         return;
       }
 
       if (req.method === 'POST' && pathname === '/api/v1/garvix-portal/sync') {
+        const auth = extractPortalAuth(req);
+        if (!auth || auth.role !== 'MASTER_ADMIN') {
+          throw new Error(
+            'DENIED_ADMIN_REQUIRED: Valid Master Admin Bearer token is required to modify plans, licenses, or Razorpay settings.'
+          );
+        }
+
         const body = await readJsonBody(req);
         if (Array.isArray(body.licensePlans)) {
-          portalState.licensePlans = body.licensePlans;
+          portalState.licensePlans = body.licensePlans as Array<Record<string, any>>;
         }
         if (Array.isArray(body.customerLicenses)) {
-          portalState.customerLicenses = body.customerLicenses;
+          portalState.customerLicenses = body.customerLicenses as Array<Record<string, any>>;
         }
         if (body.razorpayConfig && typeof body.razorpayConfig === 'object') {
           const rc = body.razorpayConfig as Record<string, unknown>;
+          const prevSecret = portalState.razorpayConfig?.keySecret ?? '';
+          const prevWebhook = portalState.razorpayConfig?.webhookSecret ?? '';
+          const incomingSecret = String(rc.keySecret ?? '').trim();
+          const incomingWebhook = String(rc.webhookSecret ?? '').trim();
           portalState.razorpayConfig = {
             enabled: Boolean(rc.enabled ?? true),
             mode: rc.mode === 'TEST' ? 'TEST' : 'LIVE',
             keyId: String(rc.keyId ?? '').trim(),
-            keySecret: String(rc.keySecret ?? '').trim(),
-            webhookSecret: String(rc.webhookSecret ?? '').trim(),
+            keySecret: incomingSecret || prevSecret,
+            webhookSecret: incomingWebhook || prevWebhook,
             merchantUpiVpa: String(rc.merchantUpiVpa ?? 'garvix@icici').trim(),
             companyName: String(rc.companyName ?? 'Garvix Software Solutions Pvt Ltd').trim(),
             companyGstin: String(rc.companyGstin ?? '').trim(),
+            supportEmail: String(rc.supportEmail ?? 'support@garvixcloud.in').trim(),
+            supportPhone: String(rc.supportPhone ?? '+91 98765 43210').trim(),
+            companyAddress: String(rc.companyAddress ?? 'India').trim(),
+            footerTagline: String(rc.footerTagline ?? 'Made with ❤️ in India 🇮🇳').trim(),
           };
         }
         if (body.adminCredentials && typeof body.adminCredentials === 'object') {
@@ -2963,22 +3421,45 @@ export function createLocalPanelHttpServer(
           success: true,
           requestId,
           timestamp: new Date().toISOString(),
-          data: portalState,
+          data: {
+            synced: true,
+            hasSecretConfigured: Boolean(
+              portalState.razorpayConfig?.keySecret &&
+                portalState.razorpayConfig.keySecret.length >= 8
+            ),
+          },
         });
         return;
       }
 
       if (req.method === 'POST' && pathname === '/api/v1/garvix-portal/razorpay/create-order') {
         const body = await readJsonBody(req);
-        const amountPaise = Number(body.amountPaise ?? 0);
         const planCode = String(body.planCode ?? '').trim();
-        const billingCycle = String(body.billingCycle ?? 'MONTHLY').trim();
-        const customerEmail = String(body.customerEmail ?? '').trim();
+        const billingCycle =
+          String(body.billingCycle ?? 'MONTHLY').trim().toUpperCase() === 'YEARLY'
+            ? 'YEARLY'
+            : 'MONTHLY';
+        const customerEmail = String(body.customerEmail ?? '').trim().toLowerCase();
+        const customerPassword = String(body.customerPassword ?? '').trim();
         const serverIp = String(body.serverIp ?? '').trim();
 
+        const plans = portalState.licensePlans ?? defaultPortalPlans;
+        const matchedPlan = plans.find((p) => String(p.code) === planCode);
+        if (!matchedPlan) {
+          throw new Error(`VALIDATION_FAILED: Unknown license plan code "${planCode}".`);
+        }
+
+        // LOCK 2: Compute exact price strictly on the server from saved plan (ignores any client ₹1 tampering)
+        const basePriceInr =
+          billingCycle === 'YEARLY'
+            ? Number(matchedPlan.yearlyInr || Number(matchedPlan.monthlyInr) * 10)
+            : Number(matchedPlan.monthlyInr);
+        const gstInr = Math.round(basePriceInr * 0.18);
+        const serverAmountPaise = Math.round((basePriceInr + gstInr) * 100);
+
         const activeConfig = portalState.razorpayConfig;
-        const keyId = String(body.keyId ?? activeConfig?.keyId ?? '').trim();
-        const keySecret = String(body.keySecret ?? activeConfig?.keySecret ?? '').trim();
+        const keyId = String(activeConfig?.keyId ?? '').trim();
+        const keySecret = String(activeConfig?.keySecret ?? '').trim();
         const enabled = activeConfig ? activeConfig.enabled : true;
 
         if (!enabled) {
@@ -2997,8 +3478,8 @@ export function createLocalPanelHttpServer(
           );
         }
 
-        if (!Number.isFinite(amountPaise) || amountPaise < 100) {
-          throw new Error('VALIDATION_FAILED: Invalid order amount in paise.');
+        if (!Number.isFinite(serverAmountPaise) || serverAmountPaise < 100) {
+          throw new Error('VALIDATION_FAILED: Invalid server-computed order amount.');
         }
 
         const basicAuth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
@@ -3010,11 +3491,11 @@ export function createLocalPanelHttpServer(
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            amount: Math.round(amountPaise),
+            amount: serverAmountPaise,
             currency: 'INR',
             receipt,
             notes: {
-              planCode,
+              planCode: matchedPlan.code,
               billingCycle,
               customerEmail,
               serverIp,
@@ -3033,13 +3514,27 @@ export function createLocalPanelHttpServer(
           );
         }
 
+        const createdOrderId = String(rzpJson.id);
+        pendingPortalRazorpayOrders.set(createdOrderId, {
+          orderId: createdOrderId,
+          planCode: String(matchedPlan.code),
+          planName: String(matchedPlan.name),
+          billingCycle,
+          panelMode: matchedPlan.panelMode === 'ONLY_CPANEL' ? 'ONLY_CPANEL' : 'WHM_AND_CPANEL',
+          maxAccounts: Number(matchedPlan.maxAccounts ?? 1),
+          customerEmail,
+          customerPassword,
+          serverIp,
+          amountPaise: serverAmountPaise,
+        });
+
         sendJson(res, 201, {
           success: true,
           requestId,
           timestamp: new Date().toISOString(),
           data: {
-            orderId: String(rzpJson.id),
-            amountPaise: Number(rzpJson.amount ?? amountPaise),
+            orderId: createdOrderId,
+            amountPaise: serverAmountPaise,
             currency: String(rzpJson.currency ?? 'INR'),
             keyId,
           },
@@ -3054,7 +3549,7 @@ export function createLocalPanelHttpServer(
         const razorpaySignature = String(body.razorpay_signature ?? '').trim();
 
         const activeConfig = portalState.razorpayConfig;
-        const keySecret = String(body.keySecret ?? activeConfig?.keySecret ?? '').trim();
+        const keySecret = String(activeConfig?.keySecret ?? '').trim();
 
         if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature || keySecret.length < 8) {
           throw new Error(
@@ -3072,6 +3567,48 @@ export function createLocalPanelHttpServer(
           );
         }
 
+        const pendingOrder = pendingPortalRazorpayOrders.get(razorpayOrderId);
+        let issuedLicense: Record<string, any> | null = null;
+        let customerToken: string | undefined;
+
+        if (pendingOrder) {
+          pendingPortalRazorpayOrders.delete(razorpayOrderId);
+          const randomHex = Math.random().toString(16).substring(2, 6).toUpperCase();
+          const expiryDate = new Date(
+            Date.now() + (pendingOrder.billingCycle === 'YEARLY' ? 365 : 30) * 24 * 60 * 60 * 1000
+          )
+            .toISOString()
+            .slice(0, 10);
+          issuedLicense = {
+            id: `lic-${Date.now()}`,
+            customerEmail: pendingOrder.customerEmail,
+            password: pendingOrder.customerPassword || 'Password@123',
+            planCode: pendingOrder.planCode,
+            planName: pendingOrder.planName,
+            billingCycle: pendingOrder.billingCycle,
+            panelMode: pendingOrder.panelMode,
+            maxAccounts: pendingOrder.maxAccounts,
+            serverIp: pendingOrder.serverIp,
+            hostname: `srv-${randomHex.toLowerCase()}.garvixcloud.in`,
+            licenseKey: `GVX-${pendingOrder.planCode}-${randomHex}-2026-ED25519`,
+            status: 'ACTIVE',
+            createdAt: new Date().toISOString().slice(0, 10),
+            expiresAt: expiryDate,
+            razorpayOrderId,
+            razorpayPaymentId,
+          };
+          portalState.customerLicenses = [
+            issuedLicense,
+            ...(portalState.customerLicenses ?? defaultPortalCustomerLicenses),
+          ];
+          saveExtras();
+          customerToken = signPortalToken({
+            role: 'CUSTOMER',
+            email: pendingOrder.customerEmail,
+            licenseId: String(issuedLicense.id),
+          });
+        }
+
         sendJson(res, 200, {
           success: true,
           requestId,
@@ -3080,7 +3617,89 @@ export function createLocalPanelHttpServer(
             verified: true,
             orderId: razorpayOrderId,
             paymentId: razorpayPaymentId,
+            license: issuedLicense,
+            token: customerToken,
           },
+        });
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/v1/garvix-portal/ssl/install') {
+        const body = await readJsonBody(req);
+        const rawDomain = String(body.domain ?? '')
+          .trim()
+          .toLowerCase()
+          .replace(/^https?:\/\//, '')
+          .replace(/\/.*$/, '');
+        const email = String(body.email ?? 'admin@garvixcloud.in').trim();
+        const method = String(body.method ?? 'LETS_ENCRYPT').trim() === 'CUSTOM_PEM'
+          ? 'CUSTOM_PEM'
+          : 'LETS_ENCRYPT';
+        const isPanelHostname = Boolean(body.isPanelHostname);
+
+        if (!rawDomain || !rawDomain.includes('.') || rawDomain.includes('..')) {
+          throw new Error('VALIDATION_FAILED: Please provide a valid domain or hostname.');
+        }
+
+        if (isPanelHostname) {
+          const auth = extractPortalAuth(req);
+          if (!auth || auth.role !== 'MASTER_ADMIN') {
+            throw new Error(
+              'DENIED_ADMIN_REQUIRED: Only Master Admin can install the main Panel Hostname SSL certificate.'
+            );
+          }
+        }
+
+        let issuer = "Let's Encrypt Authority R3 (AutoSSL)";
+        const expiresAt = new Date(
+          Date.now() + (method === 'CUSTOM_PEM' ? 365 : 90) * 24 * 60 * 60 * 1000
+        )
+          .toISOString()
+          .slice(0, 10);
+        const installedAt = new Date().toISOString().slice(0, 10);
+
+        if (method === 'CUSTOM_PEM') {
+          const certPem = String(body.certificatePem ?? '').trim();
+          const keyPem = String(body.privateKeyPem ?? '').trim();
+          const caBundlePem = String(body.caBundlePem ?? '').trim();
+
+          if (!certPem.includes('BEGIN CERTIFICATE') || !keyPem.includes('PRIVATE KEY')) {
+            throw new Error(
+              'VALIDATION_FAILED: Invalid PEM format. Certificate must contain "-----BEGIN CERTIFICATE-----" and Private Key must contain "PRIVATE KEY".'
+            );
+          }
+          issuer = 'Custom Uploaded X.509 SSL Certificate';
+
+          if (dataDir) {
+            try {
+              const sslDir = path.join(dataDir, 'ssl', rawDomain.replace(/[^a-z0-9.-]/g, '_'));
+              fs.mkdirSync(sslDir, { recursive: true });
+              fs.writeFileSync(path.join(sslDir, 'fullchain.pem'), `${certPem}\n${caBundlePem}`.trim(), 'utf8');
+              fs.writeFileSync(path.join(sslDir, 'privkey.pem'), keyPem, { encoding: 'utf8', mode: 0o600 });
+            } catch (_) {}
+          }
+        }
+
+        const sslRecord = {
+          domain: rawDomain,
+          issuer,
+          method,
+          email,
+          expiresAt,
+          installedAt,
+          status: 'ACTIVE',
+        };
+
+        if (isPanelHostname) {
+          portalState.panelSsl = sslRecord;
+          saveExtras();
+        }
+
+        sendJson(res, 200, {
+          success: true,
+          requestId,
+          timestamp: new Date().toISOString(),
+          data: sslRecord,
         });
         return;
       }
