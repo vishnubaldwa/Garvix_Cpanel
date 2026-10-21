@@ -18,11 +18,10 @@ import {
   Database,
   Table2,
   LogOut,
-  Terminal,
-  Server,
   Layers,
   ArrowRight,
   Copy,
+  AlertCircle,
 } from 'lucide-react';
 import {
   getAuthorizedNavigationForRole,
@@ -62,12 +61,28 @@ import {
   NebulixMasterAdmin,
   type GarvixLicensePlanConfig,
   type IssuedCustomerLicenseRecord,
+  type RazorpayGatewayConfig,
+  type MasterAdminCredentials,
 } from './components/dashboard/NebulixMasterAdmin.js';
 
 export type PanelSurface = 'store' | 'login' | 'cpanel' | 'whm' | 'admin';
 
+type AuthSession =
+  | null
+  | {
+      role: 'MASTER_ADMIN';
+      email: string;
+    }
+  | {
+      role: 'CUSTOMER';
+      license: IssuedCustomerLicenseRecord;
+    };
+
 const PLANS_STORAGE_KEY = 'garvix_license_plans_v1';
 const LICENSES_STORAGE_KEY = 'garvix_customer_licenses_v1';
+const RAZORPAY_STORAGE_KEY = 'garvix_razorpay_config_v1';
+const ADMIN_CREDS_STORAGE_KEY = 'garvix_master_admin_creds_v1';
+const AUTH_SESSION_STORAGE_KEY = 'garvix_active_auth_session_v1';
 
 export const DEFAULT_GARVIX_LICENSE_PLANS: GarvixLicensePlanConfig[] = [
   {
@@ -147,7 +162,7 @@ export const DEFAULT_CUSTOMER_LICENSES: IssuedCustomerLicenseRecord[] = [
   {
     id: 'lic-pro-default',
     customerEmail: 'admin@garvixcloud.in',
-    password: 'password123',
+    password: 'Admin@12345',
     planCode: 'WHM_PRO',
     planName: 'Garvix WHM Pro',
     panelMode: 'WHM_AND_CPANEL',
@@ -161,7 +176,7 @@ export const DEFAULT_CUSTOMER_LICENSES: IssuedCustomerLicenseRecord[] = [
   {
     id: 'lic-solo-default',
     customerEmail: 'solo@garvixcloud.in',
-    password: 'password123',
+    password: 'Admin@12345',
     planCode: 'CPANEL_SOLO',
     planName: 'Garvix cPanel Solo',
     panelMode: 'ONLY_CPANEL',
@@ -174,13 +189,29 @@ export const DEFAULT_CUSTOMER_LICENSES: IssuedCustomerLicenseRecord[] = [
   },
 ];
 
+export const DEFAULT_RAZORPAY_CONFIG: RazorpayGatewayConfig = {
+  enabled: true,
+  mode: 'LIVE',
+  keyId: '',
+  keySecret: '',
+  webhookSecret: '',
+  merchantUpiVpa: 'garvix@icici',
+  companyName: 'Garvix Software Solutions Pvt Ltd',
+  companyGstin: '27AABCG4829K1Z5',
+};
+
+export const DEFAULT_MASTER_ADMIN_CREDENTIALS: MasterAdminCredentials = {
+  email: 'admin@garvix.io',
+  password: 'Admin@12345',
+};
+
 interface GlobalSearchEntry {
   id: string;
   title: string;
   subtitle: string;
   badge: string;
   keywords: string[];
-  surface: PanelSurface;
+  surface: 'cpanel' | 'whm';
   cpanelSection?: NebulixSidebarSectionId;
   whmSection?: NebulixWhmSectionId;
 }
@@ -503,20 +534,7 @@ const INITIAL_WHM_SERVICES: WhmServiceDaemonItem[] = [
 ];
 
 export function CustomerPanelApp(): React.ReactElement {
-  // Default landing surface is the Public Home Page (`store`) unless URL explicitly points to /whm, /cpanel, /admin, or /login
-  const [activeSurface, setActiveSurface] = React.useState<PanelSurface>(() => {
-    if (typeof window !== 'undefined') {
-      const p = window.location.pathname.toLowerCase();
-      if (p.startsWith('/admin')) return 'admin';
-      if (p.startsWith('/whm')) return 'whm';
-      if (p.startsWith('/cpanel')) return 'cpanel';
-      if (p.startsWith('/login')) return 'login';
-      if (p.startsWith('/store') || p.startsWith('/portal')) return 'store';
-    }
-    return 'store';
-  });
-
-  // License Plans & Customer Licenses state (persisted in localStorage so Master Admin changes stay saved)
+  // 1. Persisted Master Admin Plans, Customer Licenses, Razorpay Config, and Admin Credentials
   const [licensePlans, setLicensePlans] = React.useState<GarvixLicensePlanConfig[]>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -526,7 +544,7 @@ export function CustomerPanelApp(): React.ReactElement {
           if (Array.isArray(parsed) && parsed.length > 0) return parsed;
         }
       } catch {
-        // ignore storage errors
+        // ignore
       }
     }
     return DEFAULT_GARVIX_LICENSE_PLANS;
@@ -542,16 +560,107 @@ export function CustomerPanelApp(): React.ReactElement {
             if (Array.isArray(parsed) && parsed.length > 0) return parsed;
           }
         } catch {
-          // ignore storage errors
+          // ignore
         }
       }
       return DEFAULT_CUSTOMER_LICENSES;
     }
   );
 
-  // Active logged-in customer license (controls whether WHM is accessible and max cPanel account limit!)
-  const [activeCustomerLicense, setActiveCustomerLicense] =
-    React.useState<IssuedCustomerLicenseRecord>(() => DEFAULT_CUSTOMER_LICENSES[0]!);
+  const [razorpayConfig, setRazorpayConfig] = React.useState<RazorpayGatewayConfig>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = window.localStorage.getItem(RAZORPAY_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as RazorpayGatewayConfig;
+          if (parsed && typeof parsed.mode === 'string') return parsed;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return DEFAULT_RAZORPAY_CONFIG;
+  });
+
+  const [adminCredentials, setAdminCredentials] = React.useState<MasterAdminCredentials>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = window.localStorage.getItem(ADMIN_CREDS_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as MasterAdminCredentials;
+          if (parsed && parsed.email && parsed.password) return parsed;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return DEFAULT_MASTER_ADMIN_CREDENTIALS;
+  });
+
+  // 2. Strict Authentication Session (`null` by default until user logs in with Email & Password)
+  const [authSession, setAuthSession] = React.useState<AuthSession>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = window.localStorage.getItem(AUTH_SESSION_STORAGE_KEY);
+        if (raw) {
+          return JSON.parse(raw) as AuthSession;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return null;
+  });
+
+  const updateAuthSession = (next: AuthSession) => {
+    setAuthSession(next);
+    if (typeof window !== 'undefined') {
+      try {
+        if (next) {
+          window.localStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(next));
+        } else {
+          window.localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+        }
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  // Determine initial surface based on URL path and whether user is logged in
+  const [activeSurface, setActiveSurface] = React.useState<PanelSurface>(() => {
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname.toLowerCase();
+      if (p.startsWith('/admin')) return 'login'; // Will open Admin Login unless already authenticated as MASTER_ADMIN
+      if (p.startsWith('/login') || p.startsWith('/whm') || p.startsWith('/cpanel')) {
+        return 'login';
+      }
+    }
+    return 'store';
+  });
+
+  // Login Portal state
+  const [loginMode, setLoginMode] = React.useState<'CUSTOMER' | 'MASTER_ADMIN'>(() => {
+    if (typeof window !== 'undefined' && window.location.pathname.toLowerCase().startsWith('/admin')) {
+      return 'MASTER_ADMIN';
+    }
+    return 'CUSTOMER';
+  });
+  const [loginEmailInput, setLoginEmailInput] = React.useState<string>('');
+  const [loginPasswordInput, setLoginPasswordInput] = React.useState<string>('');
+  const [loginError, setLoginError] = React.useState<string | null>(null);
+
+  // Sync URL `/admin` when already authenticated as MASTER_ADMIN
+  React.useEffect(() => {
+    if (authSession?.role === 'MASTER_ADMIN' && activeSurface === 'login') {
+      setActiveSurface('admin');
+    } else if (authSession?.role === 'CUSTOMER' && activeSurface === 'login') {
+      setActiveSurface(authSession.license.panelMode === 'ONLY_CPANEL' ? 'cpanel' : 'whm');
+    }
+  }, [authSession, activeSurface]);
+
+  const activeCustomerLicense: IssuedCustomerLicenseRecord =
+    authSession?.role === 'CUSTOMER' ? authSession.license : DEFAULT_CUSTOMER_LICENSES[0]!;
 
   const handleSavePlans = (nextPlans: GarvixLicensePlanConfig[]) => {
     setLicensePlans(nextPlans);
@@ -562,21 +671,25 @@ export function CustomerPanelApp(): React.ReactElement {
         // ignore
       }
     }
-    // Keep activeCustomerLicense synced if its plan was updated
-    const updatedActivePlan = nextPlans.find((p) => p.code === activeCustomerLicense.planCode);
-    if (updatedActivePlan) {
-      setActiveCustomerLicense((prev) => ({
-        ...prev,
-        planName: updatedActivePlan.name,
-        panelMode: updatedActivePlan.panelMode,
-        maxAccounts: updatedActivePlan.maxAccounts,
-      }));
+    if (authSession?.role === 'CUSTOMER') {
+      const updatedPlan = nextPlans.find((p) => p.code === authSession.license.planCode);
+      if (updatedPlan) {
+        updateAuthSession({
+          role: 'CUSTOMER',
+          license: {
+            ...authSession.license,
+            planName: updatedPlan.name,
+            panelMode: updatedPlan.panelMode,
+            maxAccounts: updatedPlan.maxAccounts,
+          },
+        });
+      }
     }
   };
 
   const handleResetDefaultPlans = () => {
     handleSavePlans(DEFAULT_GARVIX_LICENSE_PLANS);
-    showToast('Reset all license plans and pricing to factory defaults.');
+    showToast('Reset all license plans and pricing to defaults.');
   };
 
   const handleSaveCustomerLicenses = (nextLicenses: IssuedCustomerLicenseRecord[]) => {
@@ -588,9 +701,33 @@ export function CustomerPanelApp(): React.ReactElement {
         // ignore
       }
     }
-    const updatedSelf = nextLicenses.find((l) => l.id === activeCustomerLicense.id);
-    if (updatedSelf) {
-      setActiveCustomerLicense(updatedSelf);
+    if (authSession?.role === 'CUSTOMER') {
+      const updatedSelf = nextLicenses.find((l) => l.id === authSession.license.id);
+      if (updatedSelf) {
+        updateAuthSession({ role: 'CUSTOMER', license: updatedSelf });
+      }
+    }
+  };
+
+  const handleSaveRazorpayConfig = (nextConfig: RazorpayGatewayConfig) => {
+    setRazorpayConfig(nextConfig);
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem(RAZORPAY_STORAGE_KEY, JSON.stringify(nextConfig));
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const handleSaveAdminCredentials = (nextCreds: MasterAdminCredentials) => {
+    setAdminCredentials(nextCreds);
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem(ADMIN_CREDS_STORAGE_KEY, JSON.stringify(nextCreds));
+      } catch {
+        // ignore
+      }
     }
   };
 
@@ -601,7 +738,7 @@ export function CustomerPanelApp(): React.ReactElement {
   const [mobileSidebarOpen, setMobileSidebarOpen] = React.useState<boolean>(false);
   const [activeRole] = React.useState<GarvixRole>('HOSTING_ACCOUNT_OWNER');
 
-  // Active cPanel account context (can be switched via WHM [cP] Open cPanel!)
+  // Active cPanel account context
   const [activeCpanelDomain, setActiveCpanelDomain] = React.useState<string>('garvixcloud.in');
   const [activeCpanelUser, setActiveCpanelUser] = React.useState<string>('garvixprod');
 
@@ -619,7 +756,6 @@ export function CustomerPanelApp(): React.ReactElement {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return [];
     return GLOBAL_SEARCH_CATALOG.filter((entry) => {
-      // If customer is on an ONLY_CPANEL plan, hide WHM search items
       if (activeCustomerLicense.panelMode === 'ONLY_CPANEL' && entry.surface === 'whm') {
         return false;
       }
@@ -667,12 +803,10 @@ export function CustomerPanelApp(): React.ReactElement {
   const [newDnsName, setNewDnsName] = React.useState<string>('');
   const [newDnsValue, setNewDnsValue] = React.useState<string>('');
 
-  // Email creation modal fields (Username + Password + Quota)
   const [newEmailUser, setNewEmailUser] = React.useState<string>('');
   const [newEmailPass, setNewEmailPass] = React.useState<string>('GvX!8mK#4pQ$9zR2');
   const [newEmailQuota, setNewEmailQuota] = React.useState<number>(2048);
 
-  // Database creation modal fields (Engine + DB Name + DB User + DB Password)
   const [newDbEngine, setNewDbEngine] = React.useState<'POSTGRESQL_16' | 'MARIADB_10_11'>(
     'MARIADB_10_11'
   );
@@ -682,16 +816,12 @@ export function CustomerPanelApp(): React.ReactElement {
 
   // Public Store Checkout & Newly Purchased License state
   const [checkoutPlan, setCheckoutPlan] = React.useState<GarvixLicensePlanConfig | null>(null);
-  const [checkoutEmail, setCheckoutEmail] = React.useState<string>('customer@company.in');
-  const [checkoutPassword, setCheckoutPassword] = React.useState<string>('Garvix#2026');
+  const [checkoutEmail, setCheckoutEmail] = React.useState<string>('');
+  const [checkoutPassword, setCheckoutPassword] = React.useState<string>('');
   const [checkoutIp, setCheckoutIp] = React.useState<string>('200.234.39.100');
   const [newlyPurchasedLicense, setNewlyPurchasedLicense] =
     React.useState<IssuedCustomerLicenseRecord | null>(null);
 
-  // Login Portal state
-  const [loginMode, setLoginMode] = React.useState<'CUSTOMER' | 'MASTER_ADMIN'>('CUSTOMER');
-  const [loginEmailInput, setLoginEmailInput] = React.useState<string>('admin@garvixcloud.in');
-  const [loginPasswordInput, setLoginPasswordInput] = React.useState<string>('password123');
   const [toastBanner, setToastBanner] = React.useState<string | null>(null);
 
   const authorizedNavItems = React.useMemo(
@@ -704,13 +834,15 @@ export function CustomerPanelApp(): React.ReactElement {
     setTimeout(() => setToastBanner(null), 4000);
   };
 
-  // Plan-aware login handler: routes ONLY_CPANEL -> cPanel (2083) and WHM_AND_CPANEL -> WHM (2087)
-  const loginWithCustomerLicense = (license: IssuedCustomerLicenseRecord) => {
+  // Strict Customer Login Session Activator
+  const activateCustomerSession = (license: IssuedCustomerLicenseRecord) => {
     if (license.status === 'SUSPENDED') {
-      showToast(`License ${license.licenseKey} is currently SUSPENDED. Contact Master Admin.`);
+      setLoginError(`License ${license.licenseKey} is currently SUSPENDED.`);
       return;
     }
-    setActiveCustomerLicense(license);
+    updateAuthSession({ role: 'CUSTOMER', license });
+    setLoginError(null);
+
     const domainGuess = license.customerEmail.includes('@')
       ? license.customerEmail.split('@')[1] || 'garvixcloud.in'
       : 'garvixcloud.in';
@@ -726,38 +858,61 @@ export function CustomerPanelApp(): React.ReactElement {
       setActiveCpanelUser(userGuess);
       setActiveSidebarItem('dashboard');
       setActiveSurface('cpanel');
-      showToast(
-        `Logged in to ${license.planName} (1 Account Solo) → Opened cPanel Dashboard (Port 2083).`
-      );
+      showToast(`Signed in to ${license.planName} — cPanel Dashboard (Port 2083).`);
     } else {
       setActiveWhmSection('whm-overview');
       setActiveSurface('whm');
-      const limitStr =
-        license.maxAccounts === 0 ? 'Unlimited' : `${license.maxAccounts}`;
+      const limitStr = license.maxAccounts === 0 ? 'Unlimited' : `${license.maxAccounts}`;
       showToast(
-        `Logged in to ${license.planName} → Opened WHM Server Admin (Port 2087 · Limit: ${limitStr} cPanel Accounts).`
+        `Signed in to ${license.planName} — WHM Server Admin (Port 2087 · Limit: ${limitStr} cPanel Accounts).`
       );
     }
   };
 
+  // Strict Login Form Handler (Checks exact Email & Password!)
   const handleLoginFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setLoginError(null);
+    const cleanEmail = loginEmailInput.trim().toLowerCase();
+    const cleanPass = loginPasswordInput.trim();
+
     if (loginMode === 'MASTER_ADMIN') {
-      setActiveSurface('admin');
-      showToast(
-        'Signed in to Garvix Master Admin Panel — Control all Plans, Pricing & cPanel Account Limits.'
+      if (
+        cleanEmail === adminCredentials.email.toLowerCase() &&
+        cleanPass === adminCredentials.password
+      ) {
+        updateAuthSession({ role: 'MASTER_ADMIN', email: adminCredentials.email });
+        setActiveSurface('admin');
+        setLoginPasswordInput('');
+        showToast('Signed in to Garvix Master Admin Panel.');
+      } else {
+        setLoginError('Invalid Master Admin email or password.');
+      }
+      return;
+    }
+
+    // Customer Login Validation
+    const matchedLicense = customerLicenses.find(
+      (l) => l.customerEmail.toLowerCase() === cleanEmail && l.password === cleanPass
+    );
+
+    if (!matchedLicense) {
+      setLoginError(
+        'Invalid customer email or password. Please enter the email and password you created when purchasing your license.'
       );
       return;
     }
 
-    const cleanEmail = loginEmailInput.trim().toLowerCase();
-    const matched =
-      customerLicenses.find((l) => l.customerEmail.toLowerCase() === cleanEmail) ||
-      customerLicenses[0];
+    setLoginPasswordInput('');
+    activateCustomerSession(matchedLicense);
+  };
 
-    if (matched) {
-      loginWithCustomerLicense(matched);
-    }
+  const handleLogout = () => {
+    updateAuthSession(null);
+    setActiveSurface('store');
+    setLoginPasswordInput('');
+    setLoginError(null);
+    showToast('Logged out successfully.');
   };
 
   const handleAddDnsRecord = (e: React.FormEvent) => {
@@ -840,34 +995,62 @@ export function CustomerPanelApp(): React.ReactElement {
     showToast('Let’s Encrypt AutoSSL TLS 1.3 certificate issued and reloaded in Nginx.');
   };
 
-  const handleRazorpayCheckoutSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!checkoutPlan) return;
+  const finalizeLicenseIssuance = (plan: GarvixLicensePlanConfig) => {
     const rand = Math.random().toString(16).substring(2, 6).toUpperCase();
-    const newKey = `GVX-${checkoutPlan.code}-${rand}-2026-ED25519`;
+    const newKey = `GVX-${plan.code}-${rand}-2026-ED25519`;
     const createdLicense: IssuedCustomerLicenseRecord = {
       id: `lic-${Date.now()}`,
-      customerEmail: checkoutEmail.trim().toLowerCase() || 'customer@company.in',
-      password: checkoutPassword.trim() || 'Garvix#2026',
-      planCode: checkoutPlan.code,
-      planName: checkoutPlan.name,
-      panelMode: checkoutPlan.panelMode,
-      maxAccounts: checkoutPlan.maxAccounts,
+      customerEmail: checkoutEmail.trim().toLowerCase(),
+      password: checkoutPassword.trim(),
+      planCode: plan.code,
+      planName: plan.name,
+      panelMode: plan.panelMode,
+      maxAccounts: plan.maxAccounts,
       serverIp: checkoutIp.trim() || '200.234.39.100',
       hostname: 'srv2075790.hstgr.cloud',
       licenseKey: newKey,
       status: 'ACTIVE',
-      createdAt: 'Just now',
+      createdAt: new Date().toISOString().slice(0, 10),
     };
 
     handleSaveCustomerLicenses([createdLicense, ...customerLicenses]);
     setNewlyPurchasedLicense(createdLicense);
     setLoginEmailInput(createdLicense.customerEmail);
-    setLoginPasswordInput(createdLicense.password);
     setCheckoutPlan(null);
     showToast(
-      `Razorpay payment verified! Issued ${createdLicense.planName} license key (${newKey}) for ${createdLicense.customerEmail}.`
+      `Payment verified! Issued ${createdLicense.planName} license (${newKey}) for ${createdLicense.customerEmail}.`
     );
+  };
+
+  const handleRazorpayCheckoutSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!checkoutPlan || !checkoutEmail.trim() || !checkoutPassword.trim()) return;
+
+    const totalInrWithGst = Math.round(checkoutPlan.monthlyInr * 1.18);
+    const amountPaise = totalInrWithGst * 100;
+
+    // If Owner has configured a Razorpay Key ID (`rzp_...`) in Master Admin, open the real Razorpay Checkout popup if available
+    const win = typeof window !== 'undefined' ? (window as unknown as Record<string, unknown>) : {};
+    if (razorpayConfig.enabled && razorpayConfig.keyId.startsWith('rzp_') && typeof win.Razorpay === 'function') {
+      const RazorpayCtor = win.Razorpay as new (opts: Record<string, unknown>) => { open: () => void };
+      const rzpInstance = new RazorpayCtor({
+        key: razorpayConfig.keyId,
+        amount: amountPaise,
+        currency: 'INR',
+        name: razorpayConfig.companyName,
+        description: `${checkoutPlan.name} (${checkoutPlan.maxAccountsLabel})`,
+        prefill: {
+          email: checkoutEmail.trim(),
+        },
+        handler: () => {
+          finalizeLicenseIssuance(checkoutPlan);
+        },
+      });
+      rzpInstance.open();
+      return;
+    }
+
+    finalizeLicenseIssuance(checkoutPlan);
   };
 
   // WHM Handlers
@@ -898,9 +1081,7 @@ export function CustomerPanelApp(): React.ReactElement {
       prev.map((acct) => {
         if (acct.id !== accountId) return acct;
         const nextStatus = acct.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
-        showToast(
-          `WHM: Account ${acct.username} (${acct.domain}) is now ${nextStatus}.`
-        );
+        showToast(`WHM: Account ${acct.username} (${acct.domain}) is now ${nextStatus}.`);
         return { ...acct, status: nextStatus };
       })
     );
@@ -918,9 +1099,7 @@ export function CustomerPanelApp(): React.ReactElement {
     setActiveCpanelUser(acct.username);
     setActiveSidebarItem('dashboard');
     setActiveSurface('cpanel');
-    showToast(
-      `WHM Single Sign-On: Opened cPanel for ${acct.domain} (User: ${acct.username}).`
-    );
+    showToast(`WHM Single Sign-On: Opened cPanel for ${acct.domain} (User: ${acct.username}).`);
   };
 
   const handleWhmRestartService = (serviceId: string) => {
@@ -941,16 +1120,33 @@ export function CustomerPanelApp(): React.ReactElement {
     }
   };
 
-  const isPublicOrAdminSurface =
-    activeSurface === 'store' || activeSurface === 'login' || activeSurface === 'admin';
-  const canAccessWhm = activeCustomerLicense.panelMode === 'WHM_AND_CPANEL';
+  // Enforce strict route guard:
+  // - 'admin' only renders if authSession?.role === 'MASTER_ADMIN'
+  // - 'whm' and 'cpanel' only render if authSession?.role === 'CUSTOMER'
+  const effectiveSurface: PanelSurface = React.useMemo(() => {
+    if (activeSurface === 'admin') {
+      return authSession?.role === 'MASTER_ADMIN' ? 'admin' : 'login';
+    }
+    if (activeSurface === 'whm') {
+      if (authSession?.role !== 'CUSTOMER') return 'login';
+      return authSession.license.panelMode === 'WHM_AND_CPANEL' ? 'whm' : 'cpanel';
+    }
+    if (activeSurface === 'cpanel') {
+      return authSession?.role === 'CUSTOMER' ? 'cpanel' : 'login';
+    }
+    return activeSurface;
+  }, [activeSurface, authSession]);
+
+  const isWorkspaceSurface = effectiveSurface === 'whm' || effectiveSurface === 'cpanel';
+  const canCustomerAccessWhm =
+    authSession?.role === 'CUSTOMER' && authSession.license.panelMode === 'WHM_AND_CPANEL';
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-[#F7F6FD] via-[#F4F2FC] to-[#EEF2FF] text-slate-900">
       <div className="flex min-h-screen">
-        {/* SECTION A: Dynamic Sidebar — Shown only inside WHM or cPanel workspaces */}
-        {!isPublicOrAdminSurface &&
-          (activeSurface === 'whm' ? (
+        {/* SECTION A: Dynamic Sidebar — Only shown when a Customer is logged into WHM or cPanel */}
+        {isWorkspaceSurface &&
+          (effectiveSurface === 'whm' ? (
             <NebulixWhmSidebar
               activeSection={activeWhmSection}
               onSelectSection={(sec) => setActiveWhmSection(sec)}
@@ -973,7 +1169,7 @@ export function CustomerPanelApp(): React.ReactElement {
               authorizedNavItems={authorizedNavItems}
               activeCpanelDomain={activeCpanelDomain}
               activeCpanelUser={activeCpanelUser}
-              onSwitchToWhm={canAccessWhm ? () => setActiveSurface('whm') : undefined}
+              onSwitchToWhm={canCustomerAccessWhm ? () => setActiveSurface('whm') : undefined}
               mobileOpen={mobileSidebarOpen}
               onCloseMobile={() => setMobileSidebarOpen(false)}
             />
@@ -981,10 +1177,10 @@ export function CustomerPanelApp(): React.ReactElement {
 
         {/* Right Content Area */}
         <div className="flex min-w-0 flex-1 flex-col">
-          {/* Top Header — Adapts between Public Home Page / Login vs Logged-In WHM / cPanel / Master Admin */}
+          {/* Top Header — Strictly separated by Authentication State */}
           <header className="sticky top-0 z-30 flex min-h-16 flex-wrap items-center justify-between gap-2 border-b border-indigo-100/80 bg-white/90 px-3 py-2.5 backdrop-blur-xl sm:px-8">
             <div className="flex items-center gap-2.5">
-              {!isPublicOrAdminSurface && (
+              {isWorkspaceSurface && (
                 <button
                   type="button"
                   onClick={() => setMobileSidebarOpen(true)}
@@ -995,45 +1191,49 @@ export function CustomerPanelApp(): React.ReactElement {
                 </button>
               )}
 
-              {/* Brand Logo (Clicking goes to Public Home Page when in store/login, or stays in panel) */}
+              {/* Brand Logo */}
               <button
                 type="button"
-                onClick={() => setActiveSurface('store')}
+                onClick={() => {
+                  if (!authSession) {
+                    setActiveSurface('store');
+                  }
+                }}
                 className="flex items-center gap-2.5 text-left"
               >
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 via-indigo-600 to-blue-600 text-xs font-extrabold text-white shadow-sm">
-                  {activeSurface === 'whm'
+                  {effectiveSurface === 'whm'
                     ? 'WHM'
-                    : activeSurface === 'cpanel'
+                    : effectiveSurface === 'cpanel'
                       ? 'cP'
-                      : activeSurface === 'admin'
+                      : effectiveSurface === 'admin'
                         ? 'ADM'
                         : 'GVX'}
                 </div>
                 <div className="hidden sm:block">
                   <div className="font-display text-sm font-extrabold tracking-tight text-slate-900">
-                    {activeSurface === 'whm'
+                    {effectiveSurface === 'whm'
                       ? 'GARVIX WHM'
-                      : activeSurface === 'cpanel'
+                      : effectiveSurface === 'cpanel'
                         ? 'GARVIX cPanel'
-                        : activeSurface === 'admin'
+                        : effectiveSurface === 'admin'
                           ? 'GARVIX Master Admin'
                           : 'GARVIX Cloud'}
                   </div>
                   <div className="text-[10px] font-semibold text-indigo-600">
-                    {activeSurface === 'whm'
+                    {effectiveSurface === 'whm'
                       ? `Port 2087 · ${activeCustomerLicense.planName}`
-                      : activeSurface === 'cpanel'
+                      : effectiveSurface === 'cpanel'
                         ? `Port 2083 · ${activeCpanelDomain}`
-                        : activeSurface === 'admin'
-                          ? 'Owner Plan & Pricing Control'
-                          : 'Self-Hosted WHM & cPanel Licenses'}
+                        : effectiveSurface === 'admin'
+                          ? 'Owner Control Panel'
+                          : 'Self-Hosted WHM & cPanel Software Licenses'}
                   </div>
                 </div>
               </button>
 
               {/* Global Search Bar inside WHM & cPanel */}
-              {!isPublicOrAdminSurface && (
+              {isWorkspaceSurface && (
                 <div className="relative ml-1 sm:ml-3">
                   <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <input
@@ -1053,7 +1253,7 @@ export function CustomerPanelApp(): React.ReactElement {
                       }
                     }}
                     aria-label="Search cPanel or WHM tools"
-                    placeholder="Search api, terminal, cron, php, sql, file, email, whm..."
+                    placeholder="Search api, terminal, cron, php, sql, file, email..."
                     className="h-10 w-48 rounded-2xl border border-indigo-100/90 bg-[#F7F6FD] pl-10 pr-4 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/15 sm:w-64 md:w-80"
                   />
 
@@ -1074,9 +1274,7 @@ export function CustomerPanelApp(): React.ReactElement {
                       </div>
                       {matchedSearchResults.length === 0 ? (
                         <div className="p-4 text-xs text-slate-500">
-                          No matching tool found for &ldquo;{searchQuery}&rdquo;. Try{' '}
-                          <strong>terminal</strong>, <strong>api</strong>, <strong>sql</strong>,{' '}
-                          <strong>file</strong>, or <strong>email</strong>.
+                          No matching tool found for &ldquo;{searchQuery}&rdquo;.
                         </div>
                       ) : (
                         <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto">
@@ -1106,113 +1304,81 @@ export function CustomerPanelApp(): React.ReactElement {
               )}
             </div>
 
-            {/* Right Header Navigation Controls */}
-            <div className="flex items-center gap-1.5 sm:gap-2.5">
-              {activeSurface === 'store' || activeSurface === 'login' ? (
-                <div className="flex flex-wrap items-center gap-2">
+            {/* Right Header Controls — Strictly Scoped */}
+            <div className="flex items-center gap-2">
+              {!authSession ? (
+                /* PUBLIC VISITOR HEADER: Only Plans & Pricing + Login (NO Master Admin button!) */
+                <div className="flex items-center gap-2">
                   <Button
                     size="sm"
-                    variant={activeSurface === 'store' ? 'nebulix' : 'outline'}
+                    variant={effectiveSurface === 'store' ? 'nebulix' : 'outline'}
                     onClick={() => setActiveSurface('store')}
                   >
-                    <Layers className="h-3.5 w-3.5" /> Home (Plans &amp; Pricing)
+                    <Layers className="h-3.5 w-3.5" /> Plans &amp; Pricing
                   </Button>
                   <Button
                     size="sm"
-                    variant={
-                      activeSurface === 'login' && loginMode === 'CUSTOMER' ? 'nebulix' : 'outline'
-                    }
+                    variant={effectiveSurface === 'login' ? 'nebulix' : 'outline'}
                     onClick={() => {
                       setLoginMode('CUSTOMER');
+                      setLoginError(null);
                       setActiveSurface('login');
                     }}
                   >
-                    <Lock className="h-3.5 w-3.5" /> Customer Login
+                    <Lock className="h-3.5 w-3.5" /> Login
+                  </Button>
+                </div>
+              ) : authSession.role === 'MASTER_ADMIN' ? (
+                /* AUTHENTICATED MASTER ADMIN HEADER */
+                <div className="flex items-center gap-2">
+                  <Badge variant="default">Logged in: {authSession.email}</Badge>
+                  <Button
+                    size="sm"
+                    variant={effectiveSurface === 'admin' ? 'nebulix' : 'outline'}
+                    onClick={() => setActiveSurface('admin')}
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5" /> Master Admin Dashboard
                   </Button>
                   <Button
                     size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setActiveSurface('admin');
-                      showToast(
-                        'Opened Garvix Master Admin Panel — Manage Plans, Pricing & Account Limits.'
-                      );
-                    }}
+                    variant={effectiveSurface === 'store' ? 'nebulix' : 'outline'}
+                    onClick={() => setActiveSurface('store')}
                   >
-                    <ShieldCheck className="h-3.5 w-3.5 text-violet-600" /> Master Admin (Plans &amp; Pricing)
+                    Preview Storefront
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={handleLogout}>
+                    <LogOut className="h-3.5 w-3.5 text-rose-600" /> Logout
                   </Button>
                 </div>
               ) : (
-                <>
-                  {/* Logged-In Switcher (Respects Customer Plan Mode!) */}
-                  <div className="flex rounded-xl border border-indigo-100 bg-[#F7F6FD] p-0.5 sm:p-1">
-                    {activeSurface === 'admin' ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => setActiveSurface('admin')}
-                          className="rounded-lg bg-gradient-to-r from-violet-600 to-blue-600 px-3 py-1 text-xs font-bold text-white shadow-xs"
-                        >
-                          Master Admin
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setActiveSurface('store')}
-                          className="rounded-lg px-3 py-1 text-xs font-bold text-slate-600 hover:text-indigo-900"
-                        >
-                          Public Store
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setActiveSurface('whm')}
-                          className="rounded-lg px-3 py-1 text-xs font-bold text-slate-600 hover:text-indigo-900"
-                        >
-                          WHM (2087)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setActiveSurface('cpanel')}
-                          className="rounded-lg px-3 py-1 text-xs font-bold text-slate-600 hover:text-indigo-900"
-                        >
-                          cPanel (2083)
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        {canAccessWhm && (
-                          <button
-                            type="button"
-                            onClick={() => setActiveSurface('whm')}
-                            className={`rounded-lg px-2.5 py-1 text-[11px] sm:px-3 sm:text-xs font-bold transition-all ${
-                              activeSurface === 'whm'
-                                ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-xs'
-                                : 'text-slate-600 hover:text-indigo-900'
-                            }`}
-                          >
-                            WHM (2087)
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setActiveSurface('cpanel')}
-                          className={`rounded-lg px-2.5 py-1 text-[11px] sm:px-3 sm:text-xs font-bold transition-all ${
-                            activeSurface === 'cpanel'
-                              ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-xs'
-                              : 'text-slate-600 hover:text-indigo-900'
-                          }`}
-                        >
-                          cPanel (2083)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setActiveSurface('admin')}
-                          className="rounded-lg px-2.5 py-1 text-[11px] sm:px-3 sm:text-xs font-bold text-indigo-700 hover:bg-indigo-50"
-                        >
-                          Master Admin
-                        </button>
-                      </>
-                    )}
-                  </div>
+                /* AUTHENTICATED CUSTOMER HEADER (Strictly WHM+cPanel OR Only cPanel — NEVER Master Admin!) */
+                <div className="flex items-center gap-2">
+                  {canCustomerAccessWhm && (
+                    <div className="flex rounded-xl border border-indigo-100 bg-[#F7F6FD] p-0.5 sm:p-1">
+                      <button
+                        type="button"
+                        onClick={() => setActiveSurface('whm')}
+                        className={`rounded-lg px-3 py-1 text-xs font-bold transition-all ${
+                          effectiveSurface === 'whm'
+                            ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-indigo-900'
+                        }`}
+                      >
+                        WHM (2087)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveSurface('cpanel')}
+                        className={`rounded-lg px-3 py-1 text-xs font-bold transition-all ${
+                          effectiveSurface === 'cpanel'
+                            ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-indigo-900'
+                        }`}
+                      >
+                        cPanel (2083)
+                      </button>
+                    </div>
+                  )}
 
                   <button
                     type="button"
@@ -1223,40 +1389,27 @@ export function CustomerPanelApp(): React.ReactElement {
                     <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-violet-600" />
                   </button>
 
-                  {/* User Identity Badge */}
                   <div className="hidden items-center gap-2 rounded-2xl border border-indigo-100 bg-white px-3 py-1.5 shadow-2xs md:flex">
                     <div className="text-left">
                       <div className="text-xs font-bold leading-none text-slate-900">
-                        {activeSurface === 'admin'
-                          ? 'Garvix Super Admin'
-                          : activeCustomerLicense.customerEmail}
+                        {activeCustomerLicense.customerEmail}
                       </div>
                       <div className="mt-0.5 text-[10px] font-semibold text-indigo-600">
-                        {activeSurface === 'admin'
-                          ? 'Master License Controller'
-                          : `${activeCustomerLicense.planName} (${
-                              activeCustomerLicense.panelMode === 'ONLY_CPANEL'
-                                ? '1 Account Solo'
-                                : activeCustomerLicense.maxAccounts === 0
-                                  ? 'Unlimited Accounts'
-                                  : `Max ${activeCustomerLicense.maxAccounts} Accounts`
-                            })`}
+                        {activeCustomerLicense.planName} (
+                        {activeCustomerLicense.panelMode === 'ONLY_CPANEL'
+                          ? '1 Account Solo'
+                          : activeCustomerLicense.maxAccounts === 0
+                            ? 'Unlimited Accounts'
+                            : `Max ${activeCustomerLicense.maxAccounts} Accounts`}
+                        )
                       </div>
                     </div>
                   </div>
 
-                  {/* Logout Button -> Returns to Public Home Page */}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setActiveSurface('store');
-                      showToast('Logged out successfully. Returned to Public Home Page.');
-                    }}
-                  >
+                  <Button size="sm" variant="outline" onClick={handleLogout}>
                     <LogOut className="h-3.5 w-3.5 text-rose-600" /> Logout
                   </Button>
-                </>
+                </div>
               )}
             </div>
           </header>
@@ -1281,11 +1434,10 @@ export function CustomerPanelApp(): React.ReactElement {
           {/* Main Workspace Container */}
           <main className="mx-auto w-full max-w-[1400px] min-w-0 flex-1 space-y-8 px-4 py-6 sm:px-8 sm:py-8">
             {/* =================================================================
-                SURFACE 0: PUBLIC HOME PAGE (PLANS & PRICING + SSH INSTALL + LOGIN)
+                SURFACE 0: CLEAN PUBLIC HOME PAGE (PLANS & PRICING FOR CUSTOMERS)
                ================================================================= */}
-            {activeSurface === 'store' && (
+            {effectiveSurface === 'store' && (
               <AnimatedContent className="space-y-10">
-                {/* Public Home Page Hero */}
                 <AuroraBackground className="p-6 sm:p-10">
                   <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
                     <div className="space-y-4">
@@ -1302,14 +1454,14 @@ export function CustomerPanelApp(): React.ReactElement {
                       </div>
 
                       <h1 className="font-display text-2xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-                        <BlurText text="Choose Your Garvix cPanel Solo or WHM + cPanel Server License" />
+                        <BlurText text="High-Speed cPanel & WHM Control Panel Software for Your Linux Server" />
                       </h1>
 
                       <p className="max-w-2xl text-xs leading-relaxed text-slate-600 sm:text-sm">
-                        Install Garvix on your own Linux VPS or Dedicated Server. Buy{' '}
-                        <strong>cPanel Solo (1 Account)</strong> to get a direct cPanel dashboard
-                        (`Port 2083`), or choose <strong>WHM + cPanel</strong> (`Port 2087`) to
-                        create and manage multiple isolated cPanel accounts on your server.
+                        Choose <strong>Garvix cPanel Solo</strong> for a single website/account
+                        (`Port 2083`), or choose <strong>Garvix WHM + cPanel</strong> (`Port 2087`)
+                        to create and manage multiple isolated cPanel accounts on your own VPS or
+                        Dedicated Server.
                       </p>
 
                       <div className="flex flex-wrap items-center gap-3 pt-1">
@@ -1317,57 +1469,51 @@ export function CustomerPanelApp(): React.ReactElement {
                           variant="nebulix"
                           onClick={() => {
                             setLoginMode('CUSTOMER');
+                            setLoginError(null);
                             setActiveSurface('login');
                           }}
                         >
-                          <Lock className="h-4 w-4" /> Already Have a License? Login Here
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => setActiveSurface('admin')}
-                        >
-                          <ShieldCheck className="h-4 w-4 text-violet-600" /> Master Admin: Edit Plans, Pricing &amp; Account Limits
+                          <Lock className="h-4 w-4" /> Login to Your Control Panel
                         </Button>
                       </div>
                     </div>
 
                     <div className="w-full max-w-sm rounded-2xl border border-indigo-100 bg-white/95 p-5 shadow-sm space-y-2.5">
                       <div className="text-xs font-extrabold uppercase tracking-wider text-indigo-700">
-                        How Login Works After Buying a Plan
+                        Which License Plan Do You Need?
                       </div>
                       <div className="rounded-xl border border-indigo-100 bg-[#FAF9FE] p-3 text-xs">
                         <div className="font-bold text-slate-900">
-                          1. If you buy cPanel Solo (1 Account):
+                          • cPanel Solo (1 Account):
                         </div>
                         <p className="mt-0.5 text-[11px] text-slate-600">
-                          Your login opens <strong>cPanel Dashboard (Port 2083)</strong> directly for
-                          your single account (no WHM needed).
+                          Best for 1 website/business. Opens <strong>cPanel (Port 2083)</strong>{' '}
+                          directly to manage domains, files, databases, email &amp; SSL.
                         </p>
                       </div>
                       <div className="rounded-xl border border-indigo-100 bg-[#FAF9FE] p-3 text-xs">
                         <div className="font-bold text-slate-900">
-                          2. If you buy WHM + cPanel (Multiple Accounts):
+                          • WHM + cPanel (Multi-Account):
                         </div>
                         <p className="mt-0.5 text-[11px] text-slate-600">
-                          Your login opens <strong>WHM Server Admin (Port 2087)</strong> where you
-                          can create cPanel accounts up to your plan limit &amp; click{' '}
-                          <strong>[cP] Open cPanel</strong> anytime.
+                          Best for agencies &amp; resellers. Opens <strong>WHM (Port 2087)</strong>{' '}
+                          to create isolated cPanel accounts for multiple clients.
                         </p>
                       </div>
                     </div>
                   </div>
                 </AuroraBackground>
 
-                {/* Newly Purchased License Activation Banner (Shown right after Checkout!) */}
+                {/* Newly Purchased License Activation Banner */}
                 {newlyPurchasedLicense && (
                   <SpotlightCard className="border-2 border-emerald-500 bg-emerald-50/40 p-6 space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex items-center gap-2.5">
                         <CheckCircle2 className="h-6 w-6 text-emerald-600" />
                         <div>
-                          <Badge variant="success">LICENSE ACTIVATED &amp; READY FOR LOGIN</Badge>
+                          <Badge variant="success">LICENSE ISSUED &amp; ACCOUNT READY</Badge>
                           <h2 className="mt-1 font-display text-lg font-extrabold text-slate-900">
-                            Congratulations! Your {newlyPurchasedLicense.planName} License is Active
+                            Your {newlyPurchasedLicense.planName} License is Active!
                           </h2>
                         </div>
                       </div>
@@ -1375,22 +1521,12 @@ export function CustomerPanelApp(): React.ReactElement {
                       <div className="flex flex-wrap gap-2">
                         <Button
                           variant="nebulix"
-                          onClick={() => loginWithCustomerLicense(newlyPurchasedLicense)}
+                          onClick={() => activateCustomerSession(newlyPurchasedLicense)}
                         >
-                          <ArrowRight className="h-4 w-4" /> Open Your{' '}
+                          <ArrowRight className="h-4 w-4" /> Continue to Your{' '}
                           {newlyPurchasedLicense.panelMode === 'ONLY_CPANEL'
-                            ? 'cPanel Dashboard (Port 2083)'
-                            : 'WHM Server Admin (Port 2087)'}{' '}
-                          Now
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setLoginMode('CUSTOMER');
-                            setActiveSurface('login');
-                          }}
-                        >
-                          Go to Login Page
+                            ? 'cPanel Dashboard (2083)'
+                            : 'WHM Admin Panel (2087)'}
                         </Button>
                       </div>
                     </div>
@@ -1399,23 +1535,17 @@ export function CustomerPanelApp(): React.ReactElement {
                       <div className="rounded-xl border border-indigo-100 bg-white p-4 text-xs space-y-1.5">
                         <div className="font-bold text-slate-700">Your Login &amp; License Details:</div>
                         <div>
-                          Login Email: <strong className="font-mono">{newlyPurchasedLicense.customerEmail}</strong>
+                          Login Email:{' '}
+                          <strong className="font-mono">{newlyPurchasedLicense.customerEmail}</strong>
                         </div>
                         <div>
-                          Bound Server IP: <strong className="font-mono">{newlyPurchasedLicense.serverIp}</strong>
+                          Bound Server IP:{' '}
+                          <strong className="font-mono">{newlyPurchasedLicense.serverIp}</strong>
                         </div>
                         <div>
-                          Issued Key:{' '}
+                          License Key:{' '}
                           <strong className="font-mono text-indigo-700">
                             <DecryptedText text={newlyPurchasedLicense.licenseKey} />
-                          </strong>
-                        </div>
-                        <div>
-                          Panel Access:{' '}
-                          <strong className="text-emerald-700">
-                            {newlyPurchasedLicense.panelMode === 'ONLY_CPANEL'
-                              ? 'Direct cPanel Only (1 Account)'
-                              : `WHM + Up to ${newlyPurchasedLicense.maxAccounts === 0 ? 'Unlimited' : newlyPurchasedLicense.maxAccounts} cPanel Accounts`}
                           </strong>
                         </div>
                       </div>
@@ -1443,19 +1573,18 @@ export function CustomerPanelApp(): React.ReactElement {
                   </SpotlightCard>
                 )}
 
-                {/* Dynamic License Plans Grid (Controlled from Master Admin Panel) */}
+                {/* License Plans Grid */}
                 <div className="space-y-4">
                   <div className="flex flex-wrap items-end justify-between gap-2">
                     <div>
                       <h2 className="font-display text-xl font-extrabold text-slate-900">
-                        Software License Plans &amp; Monthly Pricing
+                        Select Your Server License Plan
                       </h2>
                       <p className="text-xs text-slate-500">
-                        All prices and cPanel account limits below are dynamically controlled from
-                        the <strong>Master Admin Panel</strong>.
+                        Instant Ed25519 license activation with 1-line AlmaLinux 10 installer.
                       </p>
                     </div>
-                    <Badge variant="secondary">SAC 998315 · Instant Ed25519 License Key</Badge>
+                    <Badge variant="secondary">Razorpay &amp; UPI Instant Activation</Badge>
                   </div>
 
                   <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -1495,15 +1624,6 @@ export function CustomerPanelApp(): React.ReactElement {
                                 {plan.maxAccountsLabel}
                               </div>
 
-                              <div className="mt-2 text-[11px] font-semibold text-slate-600">
-                                Login Opens:{' '}
-                                <strong className="text-indigo-700">
-                                  {plan.panelMode === 'ONLY_CPANEL'
-                                    ? 'cPanel Only (Port 2083)'
-                                    : 'WHM (Port 2087) + cPanel'}
-                                </strong>
-                              </div>
-
                               <ul className="mt-4 space-y-2 border-t border-slate-100 pt-3 text-xs text-slate-600">
                                 {plan.features.map((feat) => (
                                   <li key={feat} className="flex items-start gap-2">
@@ -1528,80 +1648,34 @@ export function CustomerPanelApp(): React.ReactElement {
                     ))}
                   </div>
                 </div>
-
-                {/* 3-Step Installation & Login Guide */}
-                <div className="grid gap-4 md:grid-cols-3">
-                  <SpotlightCard className="p-5 space-y-2">
-                    <div className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-100 font-display text-sm font-extrabold text-indigo-700">
-                      1
-                    </div>
-                    <h3 className="font-display text-sm font-extrabold text-slate-900">
-                      Buy Plan &amp; Bind Server IPv4
-                    </h3>
-                    <p className="text-xs text-slate-600">
-                      Select <strong>cPanel Solo</strong> (1 account) or <strong>WHM + cPanel</strong>{' '}
-                      (multiple accounts), enter your server IP (`200.234.39.100`), and create your
-                      login credentials.
-                    </p>
-                  </SpotlightCard>
-
-                  <SpotlightCard className="p-5 space-y-2">
-                    <div className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-100 font-display text-sm font-extrabold text-indigo-700">
-                      2
-                    </div>
-                    <h3 className="font-display text-sm font-extrabold text-slate-900">
-                      Run 1-Line SSH Installer on VPS
-                    </h3>
-                    <p className="text-xs text-slate-600">
-                      Paste the 1-line installer command on your fresh AlmaLinux 10 server. It
-                      configures Nginx, PHP-FPM, MariaDB/PostgreSQL, Mail, and verifies your Ed25519
-                      license.
-                    </p>
-                  </SpotlightCard>
-
-                  <SpotlightCard className="p-5 space-y-2">
-                    <div className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-100 font-display text-sm font-extrabold text-indigo-700">
-                      3
-                    </div>
-                    <h3 className="font-display text-sm font-extrabold text-slate-900">
-                      Login to WHM or cPanel
-                    </h3>
-                    <p className="text-xs text-slate-600">
-                      Click <strong>Customer Login</strong>. Your license automatically opens{' '}
-                      <strong>cPanel (2083)</strong> for Solo plans or <strong>WHM (2087)</strong>{' '}
-                      for multi-account plans!
-                    </p>
-                  </SpotlightCard>
-                </div>
               </AnimatedContent>
             )}
 
             {/* =================================================================
-                SURFACE 1: GARVIX cPANEL (DASHBOARD + ALL cPANEL TOOLS)
+                SURFACE 1: GARVIX cPANEL (LOGGED-IN CUSTOMER)
                ================================================================= */}
-            {activeSurface === 'cpanel' && activeSidebarItem === 'dashboard' && (
+            {effectiveSurface === 'cpanel' && activeSidebarItem === 'dashboard' && (
               <div className="space-y-8">
-                {/* Active License Context Strip inside cPanel */}
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-indigo-100 bg-white px-4 py-3 text-xs shadow-2xs">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="success">cPANEL PORT 2083 ACTIVE</Badge>
+                    <Badge variant="success">cPANEL PORT 2083</Badge>
                     <span className="font-semibold text-slate-700">
                       Account: <strong className="font-mono">{activeCpanelUser}</strong> (
                       <strong className="font-mono">{activeCpanelDomain}</strong>)
                     </span>
                     <span className="text-slate-300">•</span>
                     <span className="text-slate-600">
-                      License: <strong className="text-indigo-700">{activeCustomerLicense.planName}</strong>
+                      License:{' '}
+                      <strong className="text-indigo-700">{activeCustomerLicense.planName}</strong>
                     </span>
                   </div>
-                  {canAccessWhm && (
+                  {canCustomerAccessWhm && (
                     <Button size="sm" variant="outline" onClick={() => setActiveSurface('whm')}>
                       ← Return to WHM Server Admin (Port 2087)
                     </Button>
                   )}
                 </div>
 
-                {/* SECTION B: Welcome Section with BlurText, GradientText & Floating Cloud SVG */}
                 <AnimatedContent delayMs={0}>
                   <NebulixWelcomeHero
                     onAddDomain={() => setDnsModalOpen(true)}
@@ -1610,7 +1684,6 @@ export function CustomerPanelApp(): React.ReactElement {
                   />
                 </AnimatedContent>
 
-                {/* SECTION C: Animated Statistics (6 SpotlightCard + CountUp cards) */}
                 <AnimatedContent delayMs={70}>
                   <NebulixStatsGrid
                     activeWebsitesCount={3}
@@ -1624,7 +1697,6 @@ export function CustomerPanelApp(): React.ReactElement {
                   />
                 </AnimatedContent>
 
-                {/* SECTION E: Quick Actions (5 One-Click Action Cards) */}
                 <AnimatedContent delayMs={130}>
                   <NebulixQuickActions
                     onAddDomain={() => setDnsModalOpen(true)}
@@ -1635,15 +1707,12 @@ export function CustomerPanelApp(): React.ReactElement {
                   />
                 </AnimatedContent>
 
-                {/* SECTION D: Server Monitoring (CPU, RAM, Storage, Animated Bandwidth Chart, Health) */}
                 <AnimatedContent delayMs={190}>
                   <NebulixServerMonitoring />
                 </AnimatedContent>
 
-                {/* Active DNS Zone & Isolated Customer Databases Summary Row */}
                 <AnimatedContent delayMs={240}>
                   <div className="grid gap-6 lg:grid-cols-2">
-                    {/* Authoritative DNS Records Card */}
                     <div className="min-w-0 rounded-2xl border border-indigo-100/90 bg-white p-5 shadow-[0_10px_30px_-12px_rgba(99,102,241,0.12)]">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
@@ -1685,7 +1754,6 @@ export function CustomerPanelApp(): React.ReactElement {
                       </div>
                     </div>
 
-                    {/* Isolated Customer Databases Card */}
                     <div className="min-w-0 rounded-2xl border border-indigo-100/90 bg-white p-5 shadow-[0_10px_30px_-12px_rgba(99,102,241,0.12)]">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
@@ -1747,8 +1815,7 @@ export function CustomerPanelApp(): React.ReactElement {
               </div>
             )}
 
-            {/* INNER SIDEBAR MODULE VIEWS (NEBULIX LIGHT THEME) */}
-            {activeSurface === 'cpanel' && activeSidebarItem !== 'dashboard' && (
+            {effectiveSurface === 'cpanel' && activeSidebarItem !== 'dashboard' && (
               <NebulixModulePages
                 section={activeSidebarItem}
                 activeDomain={activeCpanelDomain}
@@ -1769,9 +1836,9 @@ export function CustomerPanelApp(): React.ReactElement {
             )}
 
             {/* =================================================================
-                SURFACE 2: GARVIX WHM (DEDICATED MULTI-ACCOUNT & SERVER SUITE)
+                SURFACE 2: GARVIX WHM (LOGGED-IN WHM+cPANEL CUSTOMER)
                ================================================================= */}
-            {activeSurface === 'whm' && (
+            {effectiveSurface === 'whm' && (
               <NebulixWhmWorkspace
                 section={activeWhmSection}
                 onSelectSection={(sec) => setActiveWhmSection(sec)}
@@ -1790,73 +1857,89 @@ export function CustomerPanelApp(): React.ReactElement {
             )}
 
             {/* =================================================================
-                SURFACE 3: GARVIX MASTER ADMIN PANEL (OWNER / SUPER ADMIN)
+                SURFACE 3: GARVIX MASTER ADMIN PANEL (STRICTLY AUTHENTICATED OWNER)
                ================================================================= */}
-            {activeSurface === 'admin' && (
+            {effectiveSurface === 'admin' && authSession?.role === 'MASTER_ADMIN' && (
               <NebulixMasterAdmin
                 plans={licensePlans}
                 onSavePlans={handleSavePlans}
                 onResetDefaultPlans={handleResetDefaultPlans}
                 customerLicenses={customerLicenses}
                 onSaveCustomerLicenses={handleSaveCustomerLicenses}
+                razorpayConfig={razorpayConfig}
+                onSaveRazorpayConfig={handleSaveRazorpayConfig}
+                adminCredentials={adminCredentials}
+                onSaveAdminCredentials={handleSaveAdminCredentials}
                 onOpenPublicStore={() => setActiveSurface('store')}
-                onImpersonateLicense={(lic) => loginWithCustomerLicense(lic)}
                 onShowToast={showToast}
               />
             )}
 
             {/* =================================================================
-                SURFACE 4: UNIFIED LOGIN PORTAL (PLAN-BASED REDIRECT TO WHM OR cPANEL)
+                SURFACE 4: STRICT LOGIN PORTAL (NO DEMO BYPASS BUTTONS)
                ================================================================= */}
-            {activeSurface === 'login' && (
-              <AnimatedContent className="space-y-6">
-                <AuroraBackground className="mx-auto max-w-2xl p-6 sm:p-8">
-                  <div className="flex flex-wrap gap-2">
+            {effectiveSurface === 'login' && (
+              <AnimatedContent className="py-6">
+                <AuroraBackground className="mx-auto max-w-md p-6 sm:p-8">
+                  <div className="flex gap-2">
                     <Button
                       variant={loginMode === 'CUSTOMER' ? 'nebulix' : 'outline'}
                       size="sm"
-                      onClick={() => setLoginMode('CUSTOMER')}
+                      className="flex-1"
+                      onClick={() => {
+                        setLoginMode('CUSTOMER');
+                        setLoginError(null);
+                      }}
                     >
                       <UserCheck className="h-4 w-4" />
-                      Customer License Login (Auto-Opens WHM or cPanel)
+                      Customer Login
                     </Button>
                     <Button
                       variant={loginMode === 'MASTER_ADMIN' ? 'blue' : 'outline'}
                       size="sm"
-                      onClick={() => setLoginMode('MASTER_ADMIN')}
+                      className="flex-1"
+                      onClick={() => {
+                        setLoginMode('MASTER_ADMIN');
+                        setLoginError(null);
+                      }}
                     >
                       <ShieldCheck className="h-4 w-4" />
-                      Garvix Master Admin Login (Owner)
+                      Master Admin
                     </Button>
                   </div>
 
                   <div className="mt-5">
                     <h2 className="font-display text-xl font-extrabold text-slate-900">
                       {loginMode === 'CUSTOMER'
-                        ? 'Sign In to Your Garvix Licensed Server Panel'
-                        : 'Garvix Master Admin Login (Plans, Pricing & Account Limits)'}
+                        ? 'Sign In to Your Server Control Panel'
+                        : 'Master Admin Login (Owner Only)'}
                     </h2>
                     <p className="mt-1 text-xs text-slate-600">
                       {loginMode === 'CUSTOMER'
-                        ? 'Enter your registered email & password. If your plan is cPanel Solo (1 Account), you will go directly to cPanel (2083). If your plan includes WHM, you will go to WHM (2087).'
-                        : 'Sign in as the Garvix Owner to update plan pricing (₹), max cPanel account quotas, and customer server IPs.'}
+                        ? 'Enter your registered email & password. Your account will open cPanel (Port 2083) or WHM (Port 2087) based on your purchased plan.'
+                        : 'Sign in with your Master Admin email & password to manage plans, pricing, account limits, and Razorpay keys.'}
                     </p>
                   </div>
+
+                  {loginError && (
+                    <div className="mt-4 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+                      <span>{loginError}</span>
+                    </div>
+                  )}
 
                   <form onSubmit={handleLoginFormSubmit} className="mt-5 space-y-4">
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-700">
-                        {loginMode === 'CUSTOMER'
-                          ? 'Customer Email / Username'
-                          : 'Master Admin Email'}
+                        {loginMode === 'CUSTOMER' ? 'Registered Email Address' : 'Master Admin Email'}
                       </label>
                       <Input
                         required
-                        value={
-                          loginMode === 'CUSTOMER'
-                            ? loginEmailInput
-                            : 'owner@garvix.io'
+                        type="email"
+                        placeholder={
+                          loginMode === 'CUSTOMER' ? 'you@yourcompany.in' : 'admin@garvix.io'
                         }
+                        value={loginEmailInput}
                         onChange={(e) => setLoginEmailInput(e.target.value)}
                       />
                     </div>
@@ -1865,79 +1948,16 @@ export function CustomerPanelApp(): React.ReactElement {
                       <Input
                         required
                         type="password"
+                        placeholder="Enter your password"
                         value={loginPasswordInput}
                         onChange={(e) => setLoginPasswordInput(e.target.value)}
                       />
                     </div>
                     <Button type="submit" variant="nebulix" className="w-full">
                       <Lock className="h-4 w-4" />
-                      {loginMode === 'CUSTOMER'
-                        ? 'Sign In & Open Licensed Panel'
-                        : 'Sign In to Master Admin Panel'}
+                      {loginMode === 'CUSTOMER' ? 'Login to Panel' : 'Login to Master Admin'}
                     </Button>
                   </form>
-
-                  {/* 1-Click Quick Demo Login Buttons for Instant Testing */}
-                  <div className="mt-6 border-t border-indigo-100 pt-5 space-y-3">
-                    <div className="text-xs font-extrabold uppercase tracking-wider text-indigo-700">
-                      1-Click Instant Login (Test Each Plan Mode Immediately):
-                    </div>
-                    <div className="grid gap-2.5 sm:grid-cols-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const whmLic =
-                            customerLicenses.find((l) => l.panelMode === 'WHM_AND_CPANEL') ||
-                            DEFAULT_CUSTOMER_LICENSES[0]!;
-                          loginWithCustomerLicense(whmLic);
-                        }}
-                        className="rounded-xl border border-indigo-200 bg-white p-3 text-left text-xs transition hover:border-indigo-500 hover:bg-indigo-50/60"
-                      >
-                        <div className="font-extrabold text-indigo-900">
-                          1. WHM + cPanel Customer
-                        </div>
-                        <div className="mt-0.5 text-[11px] text-slate-600">
-                          Opens <strong>WHM (2087)</strong> + Create cPanel Accounts
-                        </div>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const soloLic =
-                            customerLicenses.find((l) => l.panelMode === 'ONLY_CPANEL') ||
-                            DEFAULT_CUSTOMER_LICENSES[1]!;
-                          loginWithCustomerLicense(soloLic);
-                        }}
-                        className="rounded-xl border border-indigo-200 bg-white p-3 text-left text-xs transition hover:border-indigo-500 hover:bg-indigo-50/60"
-                      >
-                        <div className="font-extrabold text-indigo-900">
-                          2. cPanel Solo Customer
-                        </div>
-                        <div className="mt-0.5 text-[11px] text-slate-600">
-                          Opens <strong>cPanel Only (2083)</strong> (1 Account · No WHM)
-                        </div>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveSurface('admin');
-                          showToast(
-                            'Opened Garvix Master Admin Panel — Control all Plans, Pricing & Account Limits!'
-                          );
-                        }}
-                        className="rounded-xl border border-violet-200 bg-violet-50/70 p-3 text-left text-xs transition hover:border-violet-500 hover:bg-violet-100/70"
-                      >
-                        <div className="font-extrabold text-violet-950">
-                          3. Master Admin (Owner)
-                        </div>
-                        <div className="mt-0.5 text-[11px] text-violet-800">
-                          Edit Plans, Pricing (₹) &amp; Max Accounts
-                        </div>
-                      </button>
-                    </div>
-                  </div>
                 </AuroraBackground>
               </AnimatedContent>
             )}
@@ -1946,9 +1966,8 @@ export function CustomerPanelApp(): React.ReactElement {
       </div>
 
       {/* =====================================================================
-          MODALS FOR QUICK ACTIONS (Smooth Modal Openings)
+          MODALS FOR QUICK ACTIONS
          ===================================================================== */}
-      {/* 1. Add Domain / DNS Record Modal */}
       <DialogModal
         open={dnsModalOpen}
         onClose={() => setDnsModalOpen(false)}
@@ -2000,7 +2019,6 @@ export function CustomerPanelApp(): React.ReactElement {
         </form>
       </DialogModal>
 
-      {/* 2. Create Business Email Modal (Username + Password + Generator + Quota) */}
       <DialogModal
         open={emailModalOpen}
         onClose={() => setEmailModalOpen(false)}
@@ -2079,7 +2097,6 @@ export function CustomerPanelApp(): React.ReactElement {
         </form>
       </DialogModal>
 
-      {/* 2B. Create Database & User Wizard Modal */}
       <DialogModal
         open={dbModalOpen}
         onClose={() => setDbModalOpen(false)}
@@ -2169,7 +2186,6 @@ export function CustomerPanelApp(): React.ReactElement {
         </form>
       </DialogModal>
 
-      {/* 3. Sandboxed File Manager Modal */}
       <DialogModal
         open={fileManagerModalOpen}
         onClose={() => setFileManagerModalOpen(false)}
@@ -2208,7 +2224,6 @@ export function CustomerPanelApp(): React.ReactElement {
         </div>
       </DialogModal>
 
-      {/* 4. Install AutoSSL Certificate Modal */}
       <DialogModal
         open={sslModalOpen}
         onClose={() => setSslModalOpen(false)}
@@ -2246,20 +2261,21 @@ export function CustomerPanelApp(): React.ReactElement {
             ? `Buy ${checkoutPlan.name} (₹${checkoutPlan.monthlyInr}/mo)`
             : 'Buy Garvix Software License'
         }
-        description="Create your account credentials, bind your server IPv4, and receive your Ed25519 license key + 1-line SSH install command."
+        description="Create your login credentials, bind your server IPv4, and complete payment via Razorpay / UPI."
       >
         <form onSubmit={handleRazorpayCheckoutSubmit} className="space-y-4">
           {checkoutPlan && (
-            <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-3 text-xs">
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-3 text-xs space-y-1">
               <div className="font-bold text-indigo-950">
-                Selected Plan: {checkoutPlan.name} — ₹{checkoutPlan.monthlyInr}/month
+                Plan: {checkoutPlan.name} — ₹{checkoutPlan.monthlyInr}/month (+18% GST = ₹
+                {Math.round(checkoutPlan.monthlyInr * 1.18)})
               </div>
-              <div className="mt-0.5 text-indigo-700">
-                {checkoutPlan.maxAccountsLabel} · Login Opens:{' '}
+              <div className="text-indigo-700">
+                {checkoutPlan.maxAccountsLabel} · Gateway:{' '}
                 <strong>
-                  {checkoutPlan.panelMode === 'ONLY_CPANEL'
-                    ? 'cPanel Dashboard Directly (Port 2083)'
-                    : 'WHM Server Admin (Port 2087) + cPanel'}
+                  {razorpayConfig.keyId
+                    ? `Razorpay (${razorpayConfig.mode}) · ${razorpayConfig.companyName}`
+                    : `UPI (${razorpayConfig.merchantUpiVpa})`}
                 </strong>
               </div>
             </div>
@@ -2267,7 +2283,7 @@ export function CustomerPanelApp(): React.ReactElement {
 
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-700">
-              Your Login Email / Username
+              Your Login Email Address
             </label>
             <Input
               required
@@ -2280,19 +2296,20 @@ export function CustomerPanelApp(): React.ReactElement {
 
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-700">
-              Create Panel Login Password
+              Create Your Panel Login Password
             </label>
             <Input
               required
-              type="text"
+              type="password"
               value={checkoutPassword}
               onChange={(e) => setCheckoutPassword(e.target.value)}
+              placeholder="Create a strong password"
             />
           </div>
 
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-700">
-              Your Linux Server IPv4 Address (For Ed25519 License Binding)
+              Your Linux Server IPv4 Address
             </label>
             <Input
               required
@@ -2308,7 +2325,7 @@ export function CustomerPanelApp(): React.ReactElement {
             </Button>
             <Button type="submit" variant="nebulix">
               <CreditCard className="h-4 w-4" />
-              Pay via Razorpay / UPI &amp; Activate License
+              Pay &amp; Activate License
             </Button>
           </div>
         </form>

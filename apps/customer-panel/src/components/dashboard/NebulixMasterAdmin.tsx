@@ -8,13 +8,15 @@ import {
   RefreshCw,
   Server,
   ShieldCheck,
-  Sparkles,
   Trash2,
   Users,
   CheckCircle2,
   PauseCircle,
   PlayCircle,
   ExternalLink,
+  Eye,
+  EyeOff,
+  Lock,
 } from 'lucide-react';
 import {
   AnimatedContent,
@@ -58,14 +60,33 @@ export interface IssuedCustomerLicenseRecord {
   createdAt: string;
 }
 
+export interface RazorpayGatewayConfig {
+  enabled: boolean;
+  mode: 'TEST' | 'LIVE';
+  keyId: string;
+  keySecret: string;
+  webhookSecret: string;
+  merchantUpiVpa: string;
+  companyName: string;
+  companyGstin: string;
+}
+
+export interface MasterAdminCredentials {
+  email: string;
+  password: string;
+}
+
 export interface NebulixMasterAdminProps {
   plans: GarvixLicensePlanConfig[];
   onSavePlans: (nextPlans: GarvixLicensePlanConfig[]) => void;
   onResetDefaultPlans: () => void;
   customerLicenses: IssuedCustomerLicenseRecord[];
   onSaveCustomerLicenses: (nextLicenses: IssuedCustomerLicenseRecord[]) => void;
+  razorpayConfig: RazorpayGatewayConfig;
+  onSaveRazorpayConfig: (nextConfig: RazorpayGatewayConfig) => void;
+  adminCredentials: MasterAdminCredentials;
+  onSaveAdminCredentials: (nextCreds: MasterAdminCredentials) => void;
   onOpenPublicStore: () => void;
-  onImpersonateLicense: (license: IssuedCustomerLicenseRecord) => void;
   onShowToast: (msg: string) => void;
 }
 
@@ -75,11 +96,16 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
   onResetDefaultPlans,
   customerLicenses,
   onSaveCustomerLicenses,
+  razorpayConfig,
+  onSaveRazorpayConfig,
+  adminCredentials,
+  onSaveAdminCredentials,
   onOpenPublicStore,
-  onImpersonateLicense,
   onShowToast,
 }) => {
-  const [activeTab, setActiveTab] = React.useState<'plans' | 'customers' | 'gateway'>('plans');
+  const [activeTab, setActiveTab] = React.useState<
+    'plans' | 'customers' | 'gateway' | 'security'
+  >('plans');
 
   // Plan Editor / Creator State
   const [editingCode, setEditingCode] = React.useState<string | null>(null);
@@ -94,14 +120,32 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
 
   // Manual License Issue Form
   const [newLicEmail, setNewLicEmail] = React.useState('');
-  const [newLicPassword, setNewLicPassword] = React.useState('Garvix#2026');
+  const [newLicPassword, setNewLicPassword] = React.useState('');
   const [newLicServerIp, setNewLicServerIp] = React.useState('200.234.39.100');
   const [newLicPlanCode, setNewLicPlanCode] = React.useState(plans[0]?.code || 'WHM_PRO');
 
-  // Payment Gateway Config
-  const [razorpayKeyId, setRazorpayKeyId] = React.useState('rzp_live_GarvixCloud2026');
-  const [merchantUpiVpa, setMerchantUpiVpa] = React.useState('garvix@icici');
-  const [merchantGstin, setMerchantGstin] = React.useState('27AABCG4829K1Z5');
+  // Razorpay & Payment Gateway Form State
+  const [rzpEnabled, setRzpEnabled] = React.useState<boolean>(razorpayConfig.enabled);
+  const [rzpMode, setRzpMode] = React.useState<'TEST' | 'LIVE'>(razorpayConfig.mode);
+  const [rzpKeyId, setRzpKeyId] = React.useState<string>(razorpayConfig.keyId);
+  const [rzpKeySecret, setRzpKeySecret] = React.useState<string>(razorpayConfig.keySecret);
+  const [rzpWebhookSecret, setRzpWebhookSecret] = React.useState<string>(
+    razorpayConfig.webhookSecret
+  );
+  const [merchantUpiVpa, setMerchantUpiVpa] = React.useState<string>(
+    razorpayConfig.merchantUpiVpa
+  );
+  const [companyName, setCompanyName] = React.useState<string>(razorpayConfig.companyName);
+  const [companyGstin, setCompanyGstin] = React.useState<string>(razorpayConfig.companyGstin);
+  const [showKeySecret, setShowKeySecret] = React.useState<boolean>(false);
+  const [showWebhookSecret, setShowWebhookSecret] = React.useState<boolean>(false);
+
+  // Master Admin Password Form State
+  const [adminEmailInput, setAdminEmailInput] = React.useState<string>(adminCredentials.email);
+  const [adminPasswordInput, setAdminPasswordInput] = React.useState<string>(
+    adminCredentials.password
+  );
+  const [showAdminPass, setShowAdminPass] = React.useState<boolean>(false);
 
   const computeAccountsLabel = (mode: LicensePanelMode, maxAccounts: number): string => {
     if (mode === 'ONLY_CPANEL' || maxAccounts === 1) {
@@ -159,7 +203,8 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
   const handleSavePlanForm = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) return;
-    const normalizedMax = formPanelMode === 'ONLY_CPANEL' ? 1 : Math.max(0, Number(formMaxAccounts));
+    const normalizedMax =
+      formPanelMode === 'ONLY_CPANEL' ? 1 : Math.max(0, Number(formMaxAccounts));
     const updatedPlan: GarvixLicensePlanConfig = {
       code:
         editingCode === '__NEW__'
@@ -198,7 +243,9 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
 
   const handleQuickUpdatePlan = (
     code: string,
-    patch: Partial<Pick<GarvixLicensePlanConfig, 'monthlyInr' | 'maxAccounts' | 'panelMode' | 'popular'>>
+    patch: Partial<
+      Pick<GarvixLicensePlanConfig, 'monthlyInr' | 'maxAccounts' | 'panelMode' | 'popular'>
+    >
   ) => {
     const nextPlans = plans.map((plan) => {
       if (plan.code !== code) return plan;
@@ -222,7 +269,6 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
     });
     onSavePlans(nextPlans);
 
-    // Also sync any customer licenses using this plan code so WHM reflects the new maxAccounts immediately
     const targetPlan = nextPlans.find((p) => p.code === code);
     if (targetPlan) {
       const syncedLicenses = customerLicenses.map((lic) =>
@@ -254,14 +300,14 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
 
   const handleIssueManualLicense = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newLicEmail.trim() || !newLicServerIp.trim()) return;
+    if (!newLicEmail.trim() || !newLicPassword.trim() || !newLicServerIp.trim()) return;
     const selectedPlan = plans.find((p) => p.code === newLicPlanCode) || plans[0];
     if (!selectedPlan) return;
     const randomHex = Math.random().toString(16).substring(2, 6).toUpperCase();
     const newRecord: IssuedCustomerLicenseRecord = {
       id: `lic-${Date.now()}`,
       customerEmail: newLicEmail.trim().toLowerCase(),
-      password: newLicPassword.trim() || 'Garvix#2026',
+      password: newLicPassword.trim(),
       planCode: selectedPlan.code,
       planName: selectedPlan.name,
       panelMode: selectedPlan.panelMode,
@@ -270,13 +316,66 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
       hostname: `srv-${randomHex.toLowerCase()}.garvixcloud.in`,
       licenseKey: `GVX-${selectedPlan.code}-${randomHex}-2026-ED25519`,
       status: 'ACTIVE',
-      createdAt: 'Just now',
+      createdAt: new Date().toISOString().slice(0, 10),
     };
     onSaveCustomerLicenses([newRecord, ...customerLicenses]);
     setNewLicEmail('');
+    setNewLicPassword('');
     onShowToast(
-      `Issued ${selectedPlan.name} license (${newRecord.licenseKey}) to ${newRecord.customerEmail}!`
+      `Created customer login & license (${newRecord.licenseKey}) for ${newRecord.customerEmail}!`
     );
+  };
+
+  const handleSaveRazorpaySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (rzpEnabled && (!rzpKeyId.trim() || !rzpKeyId.trim().startsWith('rzp_'))) {
+      onShowToast(
+        'Please enter a valid Razorpay Key ID starting with "rzp_test_" or "rzp_live_".'
+      );
+      return;
+    }
+    const nextConfig: RazorpayGatewayConfig = {
+      enabled: rzpEnabled,
+      mode: rzpMode,
+      keyId: rzpKeyId.trim(),
+      keySecret: rzpKeySecret.trim(),
+      webhookSecret: rzpWebhookSecret.trim(),
+      merchantUpiVpa: merchantUpiVpa.trim() || 'garvix@icici',
+      companyName: companyName.trim() || 'Garvix Software Solutions Pvt Ltd',
+      companyGstin: companyGstin.trim(),
+    };
+    onSaveRazorpayConfig(nextConfig);
+
+    // Also sync to local-panel-api backend if available
+    try {
+      await fetch('/api/v1/license-store/upi-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          merchantVpa: nextConfig.merchantUpiVpa,
+          merchantName: nextConfig.companyName,
+        }),
+      });
+    } catch {
+      // ignore if offline
+    }
+
+    onShowToast(
+      `Saved Razorpay (${nextConfig.mode} Mode · Key: ${nextConfig.keyId || 'UPI Only'}) & Payment Gateway credentials!`
+    );
+  };
+
+  const handleSaveAdminCredsSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminEmailInput.trim() || adminPasswordInput.trim().length < 6) {
+      onShowToast('Master Admin email and a password of at least 6 characters are required.');
+      return;
+    }
+    onSaveAdminCredentials({
+      email: adminEmailInput.trim().toLowerCase(),
+      password: adminPasswordInput.trim(),
+    });
+    onShowToast('Updated Master Admin login email & password!');
   };
 
   const monthlyRecurringRevenue = customerLicenses
@@ -294,35 +393,37 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
           <div className="space-y-3">
             <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-indigo-200/80 bg-white/90 px-3.5 py-1.5 text-xs font-semibold text-indigo-700 shadow-xs">
               <ShieldCheck className="h-3.5 w-3.5 text-violet-600" />
-              <span>GARVIX MASTER ADMIN PANEL (OWNER / SUPER ADMIN)</span>
+              <span>GARVIX MASTER ADMIN PANEL (AUTHENTICATED OWNER)</span>
               <span className="text-slate-300">•</span>
               <GradientText
                 colors={['#7C3AED', '#4F46E5', '#2563EB', '#7C3AED']}
                 className="text-xs font-bold"
               >
-                License Store, Pricing &amp; Account Limits Controller
+                Plans, Pricing, Account Quotas &amp; Razorpay Gateway
               </GradientText>
             </div>
 
             <h1 className="font-display text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
               <BlurText
-                text="Control All License Plans, Monthly Pricing (₹) & Max cPanel Account Quotas."
+                text="Control Store Plans, Monthly Pricing (₹), Account Limits & Razorpay Credentials."
                 delayMs={25}
               />
             </h1>
 
             <p className="max-w-2xl text-xs leading-relaxed text-slate-600 sm:text-sm">
-              Any change you make here to <strong>Plan Pricing (₹ INR)</strong>,{' '}
-              <strong>Panel Mode (cPanel Solo vs WHM + cPanel)</strong>, or{' '}
-              <strong>Max cPanel Accounts Limit</strong> immediately updates your{' '}
-              <strong>Public Home Page Store</strong> and enforces the exact account limit inside{' '}
-              <strong>WHM</strong>.
+              Manage your public license store plans, set how many cPanel accounts each plan can
+              create, manage customer logins, and configure your <strong>Razorpay Key ID &amp; Key Secret</strong>.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            <Button variant="outline" onClick={onOpenPublicStore}>
-              <ExternalLink className="h-4 w-4 text-indigo-600" /> Preview Public Home Page
+            <Button
+              variant="outline"
+              onClick={() => {
+                setActiveTab('gateway');
+              }}
+            >
+              <CreditCard className="h-4 w-4 text-indigo-600" /> Configure Razorpay Keys
             </Button>
             <Button variant="nebulix" onClick={startNewPlan}>
               <Plus className="h-4 w-4" /> + Add New License Plan
@@ -351,7 +452,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
         <SpotlightCard className="p-5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Active Customer Licenses
+              Customer Licenses
             </span>
             <KeyRound className="h-5 w-5 text-violet-600" />
           </div>
@@ -362,7 +463,24 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
             />
           </div>
           <p className="mt-1 text-xs font-semibold text-emerald-700">
-            Ed25519 Signed Server IP Bindings
+            Active Customer Logins
+          </p>
+        </SpotlightCard>
+
+        <SpotlightCard className="p-5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Razorpay Gateway Status
+            </span>
+            <CreditCard className="h-5 w-5 text-emerald-600" />
+          </div>
+          <div className="mt-2 font-display text-xl font-extrabold text-slate-900">
+            {razorpayConfig.keyId
+              ? `${razorpayConfig.mode} MODE ACTIVE`
+              : 'Key ID Not Set'}
+          </div>
+          <p className="mt-1 truncate font-mono text-xs font-semibold text-indigo-700">
+            {razorpayConfig.keyId || 'Click Tab 3 to enter Razorpay Key ID'}
           </p>
         </SpotlightCard>
 
@@ -371,28 +489,13 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
               Monthly License MRR
             </span>
-            <CreditCard className="h-5 w-5 text-emerald-600" />
+            <Server className="h-5 w-5 text-blue-600" />
           </div>
           <div className="mt-2 font-display text-3xl font-extrabold text-slate-900">
             ₹{monthlyRecurringRevenue.toLocaleString('en-IN')}
           </div>
-          <p className="mt-1 text-xs font-semibold text-emerald-700">
-            Razorpay + NPCI UPI AutoPay
-          </p>
-        </SpotlightCard>
-
-        <SpotlightCard className="p-5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Primary Production VPS
-            </span>
-            <Server className="h-5 w-5 text-blue-600" />
-          </div>
-          <div className="mt-2 font-mono text-xl font-extrabold text-slate-900">
-            200.234.39.100
-          </div>
           <p className="mt-1 text-xs font-semibold text-slate-500">
-            AlmaLinux 10 · srv2075790.hstgr.cloud
+             Primary VPS: 200.234.39.100
           </p>
         </SpotlightCard>
       </div>
@@ -409,7 +512,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                 : 'bg-white text-slate-600 hover:bg-indigo-50'
             }`}
           >
-            <Layers className="h-4 w-4" /> 1. License Plans, Pricing &amp; Account Limits ({plans.length})
+            <Layers className="h-4 w-4" /> 1. Plans, Pricing &amp; Account Limits ({plans.length})
           </button>
           <button
             type="button"
@@ -420,7 +523,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                 : 'bg-white text-slate-600 hover:bg-indigo-50'
             }`}
           >
-            <Users className="h-4 w-4" /> 2. Issued Customer Licenses &amp; Server IPs ({customerLicenses.length})
+            <Users className="h-4 w-4" /> 2. Customer Licenses &amp; Logins ({customerLicenses.length})
           </button>
           <button
             type="button"
@@ -431,15 +534,31 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                 : 'bg-white text-slate-600 hover:bg-indigo-50'
             }`}
           >
-            <CreditCard className="h-4 w-4" /> 3. Razorpay, UPI &amp; GST Settings
+            <CreditCard className="h-4 w-4" /> 3. Razorpay Credentials &amp; UPI Gateway
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('security')}
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
+              activeTab === 'security'
+                ? 'bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600 text-white shadow-sm'
+                : 'bg-white text-slate-600 hover:bg-indigo-50'
+            }`}
+          >
+            <Lock className="h-4 w-4" /> 4. Master Admin Password
           </button>
         </div>
 
-        {activeTab === 'plans' && (
-          <Button variant="outline" size="sm" onClick={onResetDefaultPlans}>
-            <RefreshCw className="h-3.5 w-3.5" /> Reset Default Plans
+        <div className="flex items-center gap-2">
+          {activeTab === 'plans' && (
+            <Button variant="outline" size="sm" onClick={onResetDefaultPlans}>
+              <RefreshCw className="h-3.5 w-3.5" /> Reset Default Plans
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={onOpenPublicStore}>
+            <ExternalLink className="h-3.5 w-3.5 text-indigo-600" /> View Public Home Page
           </Button>
-        )}
+        </div>
       </div>
 
       {/* ========================================================================
@@ -447,13 +566,14 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
           ======================================================================== */}
       {activeTab === 'plans' && (
         <div className="space-y-6">
-          {/* Modal / Drawer Form when adding or editing a plan in detail */}
           {editingCode && (
             <SpotlightCard className="border-2 border-indigo-500 p-6">
               <div className="flex items-center justify-between border-b border-indigo-100 pb-3">
                 <div>
                   <Badge variant="orange">
-                    {editingCode === '__NEW__' ? 'CREATE NEW LICENSE PLAN' : `EDIT PLAN: ${editingCode}`}
+                    {editingCode === '__NEW__'
+                      ? 'CREATE NEW LICENSE PLAN'
+                      : `EDIT PLAN: ${editingCode}`}
                   </Badge>
                   <h2 className="mt-1 font-display text-lg font-extrabold text-slate-900">
                     Configure Plan Name, Monthly Price (₹), Panel Mode &amp; cPanel Account Limit
@@ -473,7 +593,9 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                     <Input
                       required
                       value={formName}
-                      onChange={(e) => setFormName(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setFormName(e.target.value)
+                      }
                       placeholder="e.g. WHM Pro"
                     />
                   </div>
@@ -486,17 +608,19 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                       min={1}
                       required
                       value={formMonthlyInr}
-                      onChange={(e) => setFormMonthlyInr(Number(e.target.value))}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setFormMonthlyInr(Number(e.target.value))
+                      }
                     />
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-bold text-slate-700">
-                      Panel Access Mode After Login
+                      Panel Access Mode After Customer Login
                     </label>
                     <select
-                      aria-label="Panel Access Mode After Login"
+                      aria-label="Panel Access Mode After Customer Login"
                       value={formPanelMode}
-                      onChange={(e) => {
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                         const mode = e.target.value as LicensePanelMode;
                         setFormPanelMode(mode);
                         if (mode === 'ONLY_CPANEL') {
@@ -527,10 +651,13 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                       min={0}
                       disabled={formPanelMode === 'ONLY_CPANEL'}
                       value={formPanelMode === 'ONLY_CPANEL' ? 1 : formMaxAccounts}
-                      onChange={(e) => setFormMaxAccounts(Number(e.target.value))}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setFormMaxAccounts(Number(e.target.value))
+                      }
                     />
                     <span className="mt-1 block text-[11px] text-slate-500">
-                      Enter <strong>0</strong> for Unlimited cPanel accounts, or any exact limit (e.g. 5, 10, 30, 50).
+                      Enter <strong>0</strong> for Unlimited cPanel accounts, or any exact limit
+                      (e.g. 5, 10, 30, 50).
                     </span>
                   </div>
 
@@ -540,7 +667,9 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                     </label>
                     <Input
                       value={formBadge}
-                      onChange={(e) => setFormBadge(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setFormBadge(e.target.value)
+                      }
                       placeholder="UP TO 30 ACCOUNTS"
                     />
                   </div>
@@ -551,7 +680,9 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                     </label>
                     <Input
                       value={formBestFor}
-                      onChange={(e) => setFormBestFor(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setFormBestFor(e.target.value)
+                      }
                       placeholder="Agencies, Resellers & Hosting Providers"
                     />
                   </div>
@@ -562,7 +693,9 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                     <input
                       type="checkbox"
                       checked={formPopular}
-                      onChange={(e) => setFormPopular(e.target.checked)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setFormPopular(e.target.checked)
+                      }
                       className="h-4 w-4 rounded border-indigo-300 text-indigo-600"
                     />
                     Highlight as &ldquo;MOST POPULAR&rdquo; on Home Page
@@ -576,7 +709,6 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
             </SpotlightCard>
           )}
 
-          {/* Quick Inline Plan Cards Grid */}
           <div className="grid gap-5 md:grid-cols-2">
             {plans.map((plan) => (
               <SpotlightCard
@@ -588,7 +720,9 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-2">
-                      <Badge variant={plan.panelMode === 'WHM_AND_CPANEL' ? 'default' : 'secondary'}>
+                      <Badge
+                        variant={plan.panelMode === 'WHM_AND_CPANEL' ? 'default' : 'secondary'}
+                      >
                         {plan.badge}
                       </Badge>
                       {plan.popular && <Badge variant="orange">MOST POPULAR</Badge>}
@@ -620,7 +754,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                       type="number"
                       min={1}
                       value={plan.monthlyInr}
-                      onChange={(e) =>
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                         handleQuickUpdatePlan(plan.code, {
                           monthlyInr: Math.max(1, Number(e.target.value) || 0),
                         })
@@ -635,7 +769,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                     <select
                       aria-label={`Login Panel Mode for ${plan.name}`}
                       value={plan.panelMode}
-                      onChange={(e) =>
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                         handleQuickUpdatePlan(plan.code, {
                           panelMode: e.target.value as LicensePanelMode,
                         })
@@ -656,7 +790,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                       min={0}
                       disabled={plan.panelMode === 'ONLY_CPANEL'}
                       value={plan.panelMode === 'ONLY_CPANEL' ? 1 : plan.maxAccounts}
-                      onChange={(e) =>
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                         handleQuickUpdatePlan(plan.code, {
                           maxAccounts: Math.max(0, Number(e.target.value) || 0),
                         })
@@ -681,12 +815,8 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => startEditPlan(plan)}
-                    >
-                      <Edit3 className="h-3.5 w-3.5 text-indigo-600" /> Full Edit
+                    <Button size="sm" variant="outline" onClick={() => startEditPlan(plan)}>
+                      <Edit3 className="h-3.5 w-3.5 text-indigo-600" /> Edit Details
                     </Button>
                     <Button
                       size="sm"
@@ -704,60 +834,65 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
       )}
 
       {/* ========================================================================
-          TAB 2: ISSUED CUSTOMER LICENSES & SERVER IP MANAGER
+          TAB 2: ISSUED CUSTOMER LICENSES & LOGINS MANAGER
           ======================================================================== */}
       {activeTab === 'customers' && (
         <div className="space-y-6">
-          {/* Issue New Customer License Manually */}
           <SpotlightCard className="p-6">
             <h2 className="font-display text-base font-extrabold text-slate-900">
-              Issue a New Customer Server License Key
+              Create a New Customer Login &amp; Issue Server License Key
             </h2>
             <p className="text-xs text-slate-500">
-              Create a customer account &amp; bind an Ed25519 license key to their server IPv4.
+              Creates a customer account with Email + Password and binds an Ed25519 license key to
+              their server IPv4.
             </p>
-            <form
-              onSubmit={handleIssueManualLicense}
-              className="mt-4 grid gap-3 sm:grid-cols-5"
-            >
+            <form onSubmit={handleIssueManualLicense} className="mt-4 grid gap-3 sm:grid-cols-5">
               <Input
                 required
                 type="email"
                 placeholder="customer@agency.in"
                 value={newLicEmail}
-                onChange={(e) => setNewLicEmail(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setNewLicEmail(e.target.value)
+                }
               />
               <Input
                 required
-                placeholder="Login Password"
+                placeholder="Set Customer Password"
                 value={newLicPassword}
-                onChange={(e) => setNewLicPassword(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setNewLicPassword(e.target.value)
+                }
               />
               <Input
                 required
                 placeholder="Server IP (200.234.39.100)"
                 value={newLicServerIp}
-                onChange={(e) => setNewLicServerIp(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setNewLicServerIp(e.target.value)
+                }
               />
               <select
                 aria-label="Select License Plan"
                 value={newLicPlanCode}
-                onChange={(e) => setNewLicPlanCode(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  setNewLicPlanCode(e.target.value)
+                }
                 className="h-10 rounded-xl border border-indigo-100 bg-white px-3 text-xs font-bold text-slate-800"
               >
                 {plans.map((p) => (
                   <option key={p.code} value={p.code}>
-                    {p.name} (₹{p.monthlyInr}/mo · {p.maxAccounts === 0 ? 'Unlimited' : p.maxAccounts} cP)
+                    {p.name} (₹{p.monthlyInr}/mo ·{' '}
+                    {p.maxAccounts === 0 ? 'Unlimited' : p.maxAccounts} cP)
                   </option>
                 ))}
               </select>
               <Button type="submit" variant="nebulix">
-                <Plus className="h-4 w-4" /> Issue License
+                <Plus className="h-4 w-4" /> Create Customer License
               </Button>
             </form>
           </SpotlightCard>
 
-          {/* Customer Licenses List */}
           <div className="space-y-3">
             {customerLicenses.map((lic) => (
               <SpotlightCard key={lic.id} className="p-5">
@@ -773,16 +908,16 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                       <Badge variant="default">{lic.planName}</Badge>
                       <Badge variant="secondary">
                         {lic.panelMode === 'ONLY_CPANEL'
-                          ? 'Opens: cPanel Only (Port 2083)'
-                          : `Opens: WHM + cPanel (${lic.maxAccounts === 0 ? 'Unlimited' : lic.maxAccounts} Accounts)`}
+                          ? 'Customer Login Opens: cPanel Only (Port 2083)'
+                          : `Customer Login Opens: WHM + cPanel (Max ${lic.maxAccounts === 0 ? 'Unlimited' : lic.maxAccounts} Accounts)`}
                       </Badge>
                     </div>
                     <div className="text-xs text-slate-600">
-                      License Key:{' '}
-                      <code className="font-mono font-bold text-indigo-700">{lic.licenseKey}</code> ·
-                      Bound Server IP:{' '}
-                      <code className="font-mono font-bold text-slate-900">{lic.serverIp}</code> ·
-                      Issued: {lic.createdAt}
+                      Password: <code className="font-mono font-bold text-slate-800">{lic.password}</code>{' '}
+                      · License Key:{' '}
+                      <code className="font-mono font-bold text-indigo-700">{lic.licenseKey}</code>{' '}
+                      · Bound Server IP:{' '}
+                      <code className="font-mono font-bold text-slate-900">{lic.serverIp}</code>
                     </div>
                   </div>
 
@@ -794,7 +929,7 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                         min={0}
                         disabled={lic.panelMode === 'ONLY_CPANEL'}
                         value={lic.panelMode === 'ONLY_CPANEL' ? 1 : lic.maxAccounts}
-                        onChange={(e) => {
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                           const nextMax = Math.max(0, Number(e.target.value) || 0);
                           const updated = customerLicenses.map((item) =>
                             item.id === lic.id ? { ...item, maxAccounts: nextMax } : item
@@ -807,15 +942,6 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
                         className="h-8 w-20 text-xs"
                       />
                     </div>
-
-                    <Button
-                      size="sm"
-                      variant="nebulix"
-                      onClick={() => onImpersonateLicense(lic)}
-                    >
-                      <Sparkles className="h-3.5 w-3.5" /> Login as Customer (
-                      {lic.panelMode === 'ONLY_CPANEL' ? 'cPanel' : 'WHM'})
-                    </Button>
 
                     <Button
                       size="sm"
@@ -849,58 +975,254 @@ export const NebulixMasterAdmin: React.FC<NebulixMasterAdminProps> = ({
       )}
 
       {/* ========================================================================
-          TAB 3: RAZORPAY, NPCI UPI & GST SETTINGS
+          TAB 3: RAZORPAY CREDENTIALS, UPI & GST SETTINGS
           ======================================================================== */}
       {activeTab === 'gateway' && (
-        <SpotlightCard className="mx-auto max-w-2xl p-6 space-y-4">
-          <h2 className="font-display text-lg font-extrabold text-slate-900">
-            Payment Gateway, UPI QR &amp; GST Invoicing Configuration
-          </h2>
-          <p className="text-xs text-slate-500">
-            Used on the Public Home Page Checkout when customers purchase a Garvix cPanel / WHM
-            Software License.
-          </p>
-
-          <div className="space-y-3">
+        <SpotlightCard className="mx-auto max-w-3xl p-6 sm:p-8 space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-100 pb-4">
             <div>
-              <label className="mb-1 block text-xs font-bold text-slate-700">
-                Razorpay Key ID (Orders &amp; Subscriptions Webhook)
-              </label>
-              <Input
-                value={razorpayKeyId}
-                onChange={(e) => setRazorpayKeyId(e.target.value)}
-              />
+              <Badge variant="orange">PAYMENT GATEWAY CONFIGURATION</Badge>
+              <h2 className="mt-1 font-display text-xl font-extrabold text-slate-900">
+                Razorpay API Credentials, Webhook Secret &amp; Merchant UPI Setup
+              </h2>
+              <p className="text-xs text-slate-500">
+                Enter your Razorpay Key ID and Key Secret from your Razorpay Dashboard
+                (Settings → API Keys). Customers buying a plan on the Home Page will pay through
+                this gateway.
+              </p>
             </div>
-            <div>
-              <label className="mb-1 block text-xs font-bold text-slate-700">
-                Merchant NPCI UPI ID (VPA for Dynamic QR Code)
-              </label>
-              <Input
-                value={merchantUpiVpa}
-                onChange={(e) => setMerchantUpiVpa(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-bold text-slate-700">
-                Garvix Software Solutions GSTIN (SAC 998315 · 18% GST)
-              </label>
-              <Input
-                value={merchantGstin}
-                onChange={(e) => setMerchantGstin(e.target.value)}
-              />
-            </div>
+            <Badge variant={rzpKeyId.startsWith('rzp_') ? 'success' : 'secondary'}>
+              {rzpKeyId.startsWith('rzp_') ? `CONNECTED (${rzpMode})` : 'AWAITING KEY'}
+            </Badge>
           </div>
 
-          <div className="flex justify-end pt-2">
-            <Button
-              variant="nebulix"
-              onClick={() =>
-                onShowToast('Saved Razorpay, NPCI UPI VPA, and GSTIN settings for Public Store Checkout!')
-              }
-            >
-              <CheckCircle2 className="h-4 w-4" /> Save Gateway Configuration
-            </Button>
+          <form onSubmit={handleSaveRazorpaySubmit} className="space-y-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-slate-700">
+                  Razorpay Environment Mode
+                </label>
+                <select
+                  aria-label="Razorpay Environment Mode"
+                  value={rzpMode}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                    setRzpMode(e.target.value as 'TEST' | 'LIVE')
+                  }
+                  className="h-10 w-full rounded-xl border border-indigo-100 bg-white px-3 text-xs font-bold text-slate-800"
+                >
+                  <option value="LIVE">LIVE MODE (Real Customer Payments — rzp_live_...)</option>
+                  <option value="TEST">TEST MODE (Sandbox Testing — rzp_test_...)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-slate-700">
+                  Razorpay Checkout Status
+                </label>
+                <select
+                  aria-label="Razorpay Checkout Status"
+                  value={rzpEnabled ? 'ENABLED' : 'DISABLED'}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                    setRzpEnabled(e.target.value === 'ENABLED')
+                  }
+                  className="h-10 w-full rounded-xl border border-indigo-100 bg-white px-3 text-xs font-bold text-slate-800"
+                >
+                  <option value="ENABLED">Enabled on Public Home Page Checkout</option>
+                  <option value="DISABLED">Disabled (Use UPI QR / Manual Only)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-slate-700">
+                  Razorpay Key ID (`rzp_live_...` or `rzp_test_...`)
+                </label>
+                <Input
+                  required={rzpEnabled}
+                  placeholder={
+                    rzpMode === 'LIVE' ? 'rzp_live_YourKeyIdHere' : 'rzp_test_YourKeyIdHere'
+                  }
+                  value={rzpKeyId}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setRzpKeyId(e.target.value)
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-slate-700">
+                  Razorpay Key Secret (Confidential)
+                </label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    required={rzpEnabled}
+                    type={showKeySecret ? 'text' : 'password'}
+                    placeholder="Enter Razorpay Key Secret"
+                    value={rzpKeySecret}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setRzpKeySecret(e.target.value)
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowKeySecret((prev) => !prev)}
+                  >
+                    {showKeySecret ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-slate-700">
+                  Razorpay Webhook Secret (`payment.captured` Verification)
+                </label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type={showWebhookSecret ? 'text' : 'password'}
+                    placeholder="whsec_..."
+                    value={rzpWebhookSecret}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setRzpWebhookSecret(e.target.value)
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowWebhookSecret((prev) => !prev)}
+                  >
+                    {showWebhookSecret ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-slate-700">
+                  Merchant NPCI UPI ID (VPA for Direct UPI QR)
+                </label>
+                <Input
+                  placeholder="yourbusiness@icici"
+                  value={merchantUpiVpa}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setMerchantUpiVpa(e.target.value)
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-slate-700">
+                  Merchant / Company Legal Name (On GST Invoices)
+                </label>
+                <Input
+                  value={companyName}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setCompanyName(e.target.value)
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-slate-700">
+                  Company GSTIN (SAC 998315 · 18% GST)
+                </label>
+                <Input
+                  value={companyGstin}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setCompanyGstin(e.target.value)
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-indigo-100 pt-4">
+              <Button type="submit" variant="nebulix">
+                <CheckCircle2 className="h-4 w-4" /> Save Razorpay &amp; Gateway Credentials
+              </Button>
+            </div>
+          </form>
+        </SpotlightCard>
+      )}
+
+      {/* ========================================================================
+          TAB 4: MASTER ADMIN CREDENTIALS (OWNER LOGIN EMAIL & PASSWORD)
+          ======================================================================== */}
+      {activeTab === 'security' && (
+        <SpotlightCard className="mx-auto max-w-xl p-6 sm:p-8 space-y-5">
+          <div>
+            <Badge variant="orange">OWNER AUTHENTICATION</Badge>
+            <h2 className="mt-1 font-display text-xl font-extrabold text-slate-900">
+              Master Admin Login Email &amp; Password
+            </h2>
+            <p className="text-xs text-slate-500">
+              Only someone with these credentials can log into `/admin` to change plans, pricing, or
+              Razorpay keys.
+            </p>
           </div>
+
+          <form onSubmit={handleSaveAdminCredsSubmit} className="space-y-4">
+            <div>
+              <label className="mb-1.5 block text-xs font-bold text-slate-700">
+                Master Admin Email
+              </label>
+              <Input
+                required
+                type="email"
+                value={adminEmailInput}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setAdminEmailInput(e.target.value)
+                }
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-bold text-slate-700">
+                Master Admin Password
+              </label>
+              <div className="flex items-center gap-2">
+                <Input
+                  required
+                  type={showAdminPass ? 'text' : 'password'}
+                  value={adminPasswordInput}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setAdminPasswordInput(e.target.value)
+                  }
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAdminPass((prev) => !prev)}
+                >
+                  {showAdminPass ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <Button type="submit" variant="nebulix">
+                <CheckCircle2 className="h-4 w-4" /> Update Master Admin Credentials
+              </Button>
+            </div>
+          </form>
         </SpotlightCard>
       )}
     </AnimatedContent>
