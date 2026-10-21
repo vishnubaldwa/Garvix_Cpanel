@@ -478,6 +478,25 @@ export function createLocalPanelHttpServer(
 
   const upiOrdersList: NpciDynamicQrOrder[] = [];
 
+  let portalState: {
+    licensePlans?: unknown[];
+    customerLicenses?: unknown[];
+    razorpayConfig?: {
+      enabled: boolean;
+      mode: 'TEST' | 'LIVE';
+      keyId: string;
+      keySecret: string;
+      webhookSecret: string;
+      merchantUpiVpa: string;
+      companyName: string;
+      companyGstin: string;
+    };
+    adminCredentials?: {
+      email: string;
+      password: string;
+    };
+  } = {};
+
   const saveExtras = () => {
     if (!extrasFilePath) return;
     try {
@@ -497,6 +516,7 @@ export function createLocalPanelHttpServer(
             upiOrdersList,
             backupArtifactsList,
             trashItemsList,
+            portalState,
           },
           null,
           2
@@ -554,6 +574,9 @@ export function createLocalPanelHttpServer(
       }
       if (Array.isArray(parsed.trashItemsList)) {
         trashItemsList.splice(0, trashItemsList.length, ...parsed.trashItemsList);
+      }
+      if (parsed.portalState && typeof parsed.portalState === 'object') {
+        portalState = parsed.portalState;
       }
     } catch (_) {}
   }
@@ -2891,6 +2914,173 @@ export function createLocalPanelHttpServer(
           requestId,
           timestamp: new Date().toISOString(),
           data: { license: lic },
+        });
+        return;
+      }
+
+      if (req.method === 'GET' && pathname === '/api/v1/garvix-portal/bootstrap') {
+        sendJson(res, 200, {
+          success: true,
+          requestId,
+          timestamp: new Date().toISOString(),
+          data: portalState,
+        });
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/v1/garvix-portal/sync') {
+        const body = await readJsonBody(req);
+        if (Array.isArray(body.licensePlans)) {
+          portalState.licensePlans = body.licensePlans;
+        }
+        if (Array.isArray(body.customerLicenses)) {
+          portalState.customerLicenses = body.customerLicenses;
+        }
+        if (body.razorpayConfig && typeof body.razorpayConfig === 'object') {
+          const rc = body.razorpayConfig as Record<string, unknown>;
+          portalState.razorpayConfig = {
+            enabled: Boolean(rc.enabled ?? true),
+            mode: rc.mode === 'TEST' ? 'TEST' : 'LIVE',
+            keyId: String(rc.keyId ?? '').trim(),
+            keySecret: String(rc.keySecret ?? '').trim(),
+            webhookSecret: String(rc.webhookSecret ?? '').trim(),
+            merchantUpiVpa: String(rc.merchantUpiVpa ?? 'garvix@icici').trim(),
+            companyName: String(rc.companyName ?? 'Garvix Software Solutions Pvt Ltd').trim(),
+            companyGstin: String(rc.companyGstin ?? '').trim(),
+          };
+        }
+        if (body.adminCredentials && typeof body.adminCredentials === 'object') {
+          const ac = body.adminCredentials as Record<string, unknown>;
+          if (ac.email && ac.password) {
+            portalState.adminCredentials = {
+              email: String(ac.email).trim(),
+              password: String(ac.password).trim(),
+            };
+          }
+        }
+        saveExtras();
+        sendJson(res, 200, {
+          success: true,
+          requestId,
+          timestamp: new Date().toISOString(),
+          data: portalState,
+        });
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/v1/garvix-portal/razorpay/create-order') {
+        const body = await readJsonBody(req);
+        const amountPaise = Number(body.amountPaise ?? 0);
+        const planCode = String(body.planCode ?? '').trim();
+        const billingCycle = String(body.billingCycle ?? 'MONTHLY').trim();
+        const customerEmail = String(body.customerEmail ?? '').trim();
+        const serverIp = String(body.serverIp ?? '').trim();
+
+        const activeConfig = portalState.razorpayConfig;
+        const keyId = String(body.keyId ?? activeConfig?.keyId ?? '').trim();
+        const keySecret = String(body.keySecret ?? activeConfig?.keySecret ?? '').trim();
+        const enabled = activeConfig ? activeConfig.enabled : true;
+
+        if (!enabled) {
+          throw new Error(
+            'PAYMENT_GATEWAY_DISABLED: Razorpay payment gateway is currently disabled in Master Admin.'
+          );
+        }
+
+        if (
+          (!keyId.startsWith('rzp_live_') && !keyId.startsWith('rzp_test_')) ||
+          keyId.length < 14 ||
+          keySecret.length < 8
+        ) {
+          throw new Error(
+            'PAYMENT_GATEWAY_NOT_CONFIGURED: Valid Razorpay Key ID (rzp_live_... or rzp_test_...) and Key Secret are not configured in Master Admin (Tab 3). License cannot be activated without payment.'
+          );
+        }
+
+        if (!Number.isFinite(amountPaise) || amountPaise < 100) {
+          throw new Error('VALIDATION_FAILED: Invalid order amount in paise.');
+        }
+
+        const basicAuth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+        const receipt = `gvx_${Date.now()}`;
+        const rzpRes = await fetch('https://api.razorpay.com/v1/orders', {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${basicAuth}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            amount: Math.round(amountPaise),
+            currency: 'INR',
+            receipt,
+            notes: {
+              planCode,
+              billingCycle,
+              customerEmail,
+              serverIp,
+            },
+          }),
+        });
+
+        const rzpJson = (await rzpRes.json().catch(() => ({}))) as Record<string, any>;
+        if (!rzpRes.ok || !rzpJson.id) {
+          const rzpErrDesc =
+            rzpJson?.error?.description ||
+            rzpJson?.error?.reason ||
+            `Razorpay API returned HTTP ${rzpRes.status}`;
+          throw new Error(
+            `PAYMENT_GATEWAY_ERROR: Razorpay Order creation failed (${rzpErrDesc}). Please check your Razorpay Key ID & Key Secret in Master Admin.`
+          );
+        }
+
+        sendJson(res, 201, {
+          success: true,
+          requestId,
+          timestamp: new Date().toISOString(),
+          data: {
+            orderId: String(rzpJson.id),
+            amountPaise: Number(rzpJson.amount ?? amountPaise),
+            currency: String(rzpJson.currency ?? 'INR'),
+            keyId,
+          },
+        });
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/v1/garvix-portal/razorpay/verify-payment') {
+        const body = await readJsonBody(req);
+        const razorpayOrderId = String(body.razorpay_order_id ?? '').trim();
+        const razorpayPaymentId = String(body.razorpay_payment_id ?? '').trim();
+        const razorpaySignature = String(body.razorpay_signature ?? '').trim();
+
+        const activeConfig = portalState.razorpayConfig;
+        const keySecret = String(body.keySecret ?? activeConfig?.keySecret ?? '').trim();
+
+        if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature || keySecret.length < 8) {
+          throw new Error(
+            'AUTH_SIGNATURE_INVALID: Missing Razorpay payment verification parameters. License NOT activated.'
+          );
+        }
+
+        const expectedHmac = createHmac('sha256', keySecret)
+          .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+          .digest('hex');
+
+        if (expectedHmac !== razorpaySignature) {
+          throw new Error(
+            'AUTH_SIGNATURE_INVALID: Razorpay HMAC-SHA256 payment signature verification failed! License NOT activated.'
+          );
+        }
+
+        sendJson(res, 200, {
+          success: true,
+          requestId,
+          timestamp: new Date().toISOString(),
+          data: {
+            verified: true,
+            orderId: razorpayOrderId,
+            paymentId: razorpayPaymentId,
+          },
         });
         return;
       }

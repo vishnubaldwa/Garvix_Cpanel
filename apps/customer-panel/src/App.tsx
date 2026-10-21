@@ -679,8 +679,53 @@ export function CustomerPanelApp(): React.ReactElement {
   const activeCustomerLicense: IssuedCustomerLicenseRecord =
     authSession?.role === 'CUSTOMER' ? authSession.license : DEFAULT_CUSTOMER_LICENSES[0]!;
 
+  const syncPortalStateToServer = (payload: Record<string, unknown>) => {
+    if (typeof window === 'undefined') return;
+    fetch('/api/v1/garvix-portal/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  };
+
+  // Bootstrap persisted state from server on mount so all browsers/visitors see the Owner's plans & Razorpay keys
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    fetch('/api/v1/garvix-portal/bootstrap')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json: Record<string, any> | null) => {
+        const d = json?.data;
+        if (!d || typeof d !== 'object') return;
+        if (Array.isArray(d.licensePlans) && d.licensePlans.length > 0) {
+          const normalized = (d.licensePlans as GarvixLicensePlanConfig[]).map((p) => ({
+            ...p,
+            yearlyInr:
+              typeof p.yearlyInr === 'number' && p.yearlyInr > 0
+                ? p.yearlyInr
+                : p.monthlyInr * 10,
+          }));
+          setLicensePlans(normalized);
+          window.localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify(normalized));
+        }
+        if (Array.isArray(d.customerLicenses) && d.customerLicenses.length > 0) {
+          setCustomerLicenses(d.customerLicenses as IssuedCustomerLicenseRecord[]);
+          window.localStorage.setItem(LICENSES_STORAGE_KEY, JSON.stringify(d.customerLicenses));
+        }
+        if (d.razorpayConfig && typeof d.razorpayConfig === 'object') {
+          setRazorpayConfig(d.razorpayConfig as RazorpayGatewayConfig);
+          window.localStorage.setItem(RAZORPAY_STORAGE_KEY, JSON.stringify(d.razorpayConfig));
+        }
+        if (d.adminCredentials && d.adminCredentials.email && d.adminCredentials.password) {
+          setAdminCredentials(d.adminCredentials as MasterAdminCredentials);
+          window.localStorage.setItem(ADMIN_CREDS_STORAGE_KEY, JSON.stringify(d.adminCredentials));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const handleSavePlans = (nextPlans: GarvixLicensePlanConfig[]) => {
     setLicensePlans(nextPlans);
+    syncPortalStateToServer({ licensePlans: nextPlans });
     if (typeof window !== 'undefined') {
       try {
         window.localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify(nextPlans));
@@ -711,6 +756,7 @@ export function CustomerPanelApp(): React.ReactElement {
 
   const handleSaveCustomerLicenses = (nextLicenses: IssuedCustomerLicenseRecord[]) => {
     setCustomerLicenses(nextLicenses);
+    syncPortalStateToServer({ customerLicenses: nextLicenses });
     if (typeof window !== 'undefined') {
       try {
         window.localStorage.setItem(LICENSES_STORAGE_KEY, JSON.stringify(nextLicenses));
@@ -728,6 +774,7 @@ export function CustomerPanelApp(): React.ReactElement {
 
   const handleSaveRazorpayConfig = (nextConfig: RazorpayGatewayConfig) => {
     setRazorpayConfig(nextConfig);
+    syncPortalStateToServer({ razorpayConfig: nextConfig });
     if (typeof window !== 'undefined') {
       try {
         window.localStorage.setItem(RAZORPAY_STORAGE_KEY, JSON.stringify(nextConfig));
@@ -739,6 +786,7 @@ export function CustomerPanelApp(): React.ReactElement {
 
   const handleSaveAdminCredentials = (nextCreds: MasterAdminCredentials) => {
     setAdminCredentials(nextCreds);
+    syncPortalStateToServer({ adminCredentials: nextCreds });
     if (typeof window !== 'undefined') {
       try {
         window.localStorage.setItem(ADMIN_CREDS_STORAGE_KEY, JSON.stringify(nextCreds));
@@ -840,6 +888,8 @@ export function CustomerPanelApp(): React.ReactElement {
   const [checkoutEmail, setCheckoutEmail] = React.useState<string>('');
   const [checkoutPassword, setCheckoutPassword] = React.useState<string>('');
   const [checkoutIp, setCheckoutIp] = React.useState<string>('200.234.39.100');
+  const [checkoutError, setCheckoutError] = React.useState<string | null>(null);
+  const [checkoutLoading, setCheckoutLoading] = React.useState<boolean>(false);
   const [newlyPurchasedLicense, setNewlyPurchasedLicense] =
     React.useState<IssuedCustomerLicenseRecord | null>(null);
 
@@ -1046,6 +1096,8 @@ export function CustomerPanelApp(): React.ReactElement {
     handleSaveCustomerLicenses([createdLicense, ...customerLicenses]);
     setNewlyPurchasedLicense(createdLicense);
     setLoginEmailInput(createdLicense.customerEmail);
+    setCheckoutError(null);
+    setCheckoutLoading(false);
     setCheckoutPlan(null);
     showToast(
       `Payment verified! Issued ${createdLicense.planName} (${
@@ -1054,9 +1106,41 @@ export function CustomerPanelApp(): React.ReactElement {
     );
   };
 
-  const handleRazorpayCheckoutSubmit = (e: React.FormEvent) => {
+  // STRICT RAZORPAY PAYMENT GATEWAY HANDLER — ZERO FREE BYPASS!
+  const handleRazorpayCheckoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!checkoutPlan || !checkoutEmail.trim() || !checkoutPassword.trim()) return;
+    setCheckoutError(null);
+
+    const keyId = razorpayConfig.keyId.trim();
+    const keySecret = razorpayConfig.keySecret.trim();
+
+    if (!razorpayConfig.enabled) {
+      setCheckoutError(
+        'Payment Gateway Disabled: Razorpay checkout is currently disabled in Master Admin. License was NOT activated.'
+      );
+      return;
+    }
+
+    if (
+      (!keyId.startsWith('rzp_live_') && !keyId.startsWith('rzp_test_')) ||
+      keyId.length < 14 ||
+      keySecret.length < 8
+    ) {
+      setCheckoutError(
+        'Payment Gateway Not Configured: Master Admin must configure a valid Razorpay Key ID (rzp_live_... or rzp_test_...) and Key Secret in Master Admin (Tab 3: Razorpay & Admin Settings) before any license can be purchased. License was NOT activated.'
+      );
+      return;
+    }
+
+    const win =
+      typeof window !== 'undefined' ? (window as unknown as Record<string, unknown>) : {};
+    if (typeof win.Razorpay !== 'function') {
+      setCheckoutError(
+        'Razorpay Checkout SDK could not be loaded. Please disable any ad-blocker and refresh the page. License was NOT activated.'
+      );
+      return;
+    }
 
     const basePriceInr =
       checkoutBillingCycle === 'YEARLY'
@@ -1065,30 +1149,113 @@ export function CustomerPanelApp(): React.ReactElement {
     const totalInrWithGst = Math.round(basePriceInr * 1.18);
     const amountPaise = totalInrWithGst * 100;
 
-    // If Owner has configured a Razorpay Key ID (`rzp_...`) in Master Admin, open the real Razorpay Checkout popup if available
-    const win = typeof window !== 'undefined' ? (window as unknown as Record<string, unknown>) : {};
-    if (razorpayConfig.enabled && razorpayConfig.keyId.startsWith('rzp_') && typeof win.Razorpay === 'function') {
-      const RazorpayCtor = win.Razorpay as new (opts: Record<string, unknown>) => { open: () => void };
+    setCheckoutLoading(true);
+    try {
+      // Step 1: Create genuine Razorpay Order via Backend API
+      const orderRes = await fetch('/api/v1/garvix-portal/razorpay/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amountPaise,
+          planCode: checkoutPlan.code,
+          billingCycle: checkoutBillingCycle,
+          customerEmail: checkoutEmail.trim().toLowerCase(),
+          serverIp: checkoutIp.trim(),
+          keyId,
+          keySecret,
+        }),
+      });
+
+      const orderJson = (await orderRes.json().catch(() => ({}))) as Record<string, any>;
+      if (!orderRes.ok || !orderJson?.data?.orderId) {
+        const errMsg =
+          orderJson?.error?.message ||
+          'Failed to create Razorpay order. Please verify your Razorpay Key ID & Key Secret in Master Admin.';
+        setCheckoutError(errMsg);
+        setCheckoutLoading(false);
+        return;
+      }
+
+      const rzpOrderId = String(orderJson.data.orderId);
+      const selectedPlan = checkoutPlan;
+      const selectedCycle = checkoutBillingCycle;
+
+      // Step 2: Open Official Razorpay Checkout Modal bound to rzpOrderId
+      const RazorpayCtor = win.Razorpay as new (
+        opts: Record<string, unknown>
+      ) => {
+        open: () => void;
+        on?: (event: string, cb: (resp: Record<string, any>) => void) => void;
+      };
+
       const rzpInstance = new RazorpayCtor({
-        key: razorpayConfig.keyId,
+        key: keyId,
         amount: amountPaise,
         currency: 'INR',
+        order_id: rzpOrderId,
         name: razorpayConfig.companyName,
-        description: `${checkoutPlan.name} (${
-          checkoutBillingCycle === 'YEARLY' ? 'Annual License' : 'Monthly License'
-        } · ${checkoutPlan.maxAccountsLabel})`,
+        description: `${selectedPlan.name} (${
+          selectedCycle === 'YEARLY' ? 'Annual License' : 'Monthly License'
+        } · ${selectedPlan.maxAccountsLabel})`,
         prefill: {
           email: checkoutEmail.trim(),
         },
-        handler: () => {
-          finalizeLicenseIssuance(checkoutPlan, checkoutBillingCycle);
+        modal: {
+          ondismiss: () => {
+            setCheckoutLoading(false);
+            setCheckoutError(
+              'Payment was cancelled before completion. Your license was NOT activated.'
+            );
+          },
+        },
+        handler: async (rzpResponse: Record<string, unknown>) => {
+          try {
+            // Step 3: Verify HMAC-SHA256 Signature on Backend before issuing license
+            const verifyRes = await fetch('/api/v1/garvix-portal/razorpay/verify-payment', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_order_id: rzpResponse.razorpay_order_id,
+                razorpay_payment_id: rzpResponse.razorpay_payment_id,
+                razorpay_signature: rzpResponse.razorpay_signature,
+                keySecret,
+              }),
+            });
+            const verifyJson = (await verifyRes.json().catch(() => ({}))) as Record<string, any>;
+            if (!verifyRes.ok || !verifyJson?.data?.verified) {
+              setCheckoutLoading(false);
+              setCheckoutError(
+                verifyJson?.error?.message ||
+                  'Razorpay payment signature verification failed! License was NOT activated.'
+              );
+              return;
+            }
+            finalizeLicenseIssuance(selectedPlan, selectedCycle);
+          } catch {
+            setCheckoutLoading(false);
+            setCheckoutError(
+              'Network error while verifying Razorpay payment signature. License was NOT activated.'
+            );
+          }
         },
       });
-      rzpInstance.open();
-      return;
-    }
 
-    finalizeLicenseIssuance(checkoutPlan, checkoutBillingCycle);
+      if (typeof rzpInstance.on === 'function') {
+        rzpInstance.on('payment.failed', (failResp: Record<string, any>) => {
+          setCheckoutLoading(false);
+          const desc =
+            failResp?.error?.description || 'Payment failed in Razorpay Checkout.';
+          setCheckoutError(`Payment Failed: ${desc} License was NOT activated.`);
+        });
+      }
+
+      rzpInstance.open();
+    } catch {
+      setCheckoutLoading(false);
+      setCheckoutError(
+        'Could not connect to payment server to create Razorpay order. License was NOT activated.'
+      );
+    }
   };
 
   // WHM Handlers
@@ -1749,6 +1916,8 @@ export function CustomerPanelApp(): React.ReactElement {
                                 variant={plan.popular ? 'nebulix' : 'outline'}
                                 className="mt-6 w-full"
                                 onClick={() => {
+                                  setCheckoutError(null);
+                                  setCheckoutLoading(false);
                                   setCheckoutBillingCycle(storeBillingCycle);
                                   setCheckoutPlan(plan);
                                 }}
@@ -2368,10 +2537,14 @@ export function CustomerPanelApp(): React.ReactElement {
         </form>
       </DialogModal>
 
-      {/* 5. Razorpay & UPI License Checkout Modal */}
+      {/* 5. Strict Razorpay License Checkout Modal (No Free Bypass) */}
       <DialogModal
         open={checkoutPlan !== null}
-        onClose={() => setCheckoutPlan(null)}
+        onClose={() => {
+          setCheckoutError(null);
+          setCheckoutLoading(false);
+          setCheckoutPlan(null);
+        }}
         title={
           checkoutPlan
             ? `Buy ${checkoutPlan.name} (${
@@ -2381,9 +2554,16 @@ export function CustomerPanelApp(): React.ReactElement {
               })`
             : 'Buy Garvix Software License'
         }
-        description="Select Monthly or Yearly billing, create your login credentials, bind your server IPv4, and complete payment via Razorpay / UPI."
+        description="Select Monthly or Yearly billing, create your login credentials, bind your server IPv4, and complete verified payment via Razorpay."
       >
         <form onSubmit={handleRazorpayCheckoutSubmit} className="space-y-4">
+          {checkoutError && (
+            <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+              <span>{checkoutError}</span>
+            </div>
+          )}
+
           {checkoutPlan && (
             <>
               {/* Billing Cycle Selector inside Checkout Modal */}
@@ -2394,7 +2574,10 @@ export function CustomerPanelApp(): React.ReactElement {
                 <div className="grid grid-cols-2 gap-2.5">
                   <button
                     type="button"
-                    onClick={() => setCheckoutBillingCycle('MONTHLY')}
+                    onClick={() => {
+                      setCheckoutError(null);
+                      setCheckoutBillingCycle('MONTHLY');
+                    }}
                     className={`rounded-xl border p-3 text-left transition-all ${
                       checkoutBillingCycle === 'MONTHLY'
                         ? 'border-indigo-600 bg-indigo-50/90 ring-2 ring-indigo-500/20'
@@ -2413,7 +2596,10 @@ export function CustomerPanelApp(): React.ReactElement {
 
                   <button
                     type="button"
-                    onClick={() => setCheckoutBillingCycle('YEARLY')}
+                    onClick={() => {
+                      setCheckoutError(null);
+                      setCheckoutBillingCycle('YEARLY');
+                    }}
                     className={`rounded-xl border p-3 text-left transition-all ${
                       checkoutBillingCycle === 'YEARLY'
                         ? 'border-indigo-600 bg-indigo-50/90 ring-2 ring-indigo-500/20'
@@ -2459,9 +2645,10 @@ export function CustomerPanelApp(): React.ReactElement {
                 <div className="text-indigo-700">
                   {checkoutPlan.maxAccountsLabel} · Gateway:{' '}
                   <strong>
-                    {razorpayConfig.keyId
+                    {razorpayConfig.keyId.trim().startsWith('rzp_') &&
+                    razorpayConfig.keySecret.trim().length >= 8
                       ? `Razorpay (${razorpayConfig.mode}) · ${razorpayConfig.companyName}`
-                      : `UPI (${razorpayConfig.merchantUpiVpa})`}
+                      : 'Razorpay Keys Not Configured Yet (Configure in Master Admin)'}
                   </strong>
                 </div>
               </div>
@@ -2507,13 +2694,22 @@ export function CustomerPanelApp(): React.ReactElement {
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setCheckoutPlan(null)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setCheckoutError(null);
+                setCheckoutLoading(false);
+                setCheckoutPlan(null);
+              }}
+            >
               Cancel
             </Button>
-            <Button type="submit" variant="nebulix">
+            <Button type="submit" variant="nebulix" disabled={checkoutLoading}>
               <CreditCard className="h-4 w-4" />
-              Pay &amp; Activate{' '}
-              {checkoutBillingCycle === 'YEARLY' ? 'Yearly' : 'Monthly'} License
+              {checkoutLoading
+                ? 'Creating Razorpay Order...'
+                : `Pay & Activate ${checkoutBillingCycle === 'YEARLY' ? 'Yearly' : 'Monthly'} License`}
             </Button>
           </div>
         </form>
