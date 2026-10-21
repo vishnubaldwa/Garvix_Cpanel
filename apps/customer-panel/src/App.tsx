@@ -418,7 +418,15 @@ const STORE_PLANS = [
 ];
 
 export function CustomerPanelApp(): React.ReactElement {
-  const [activeSurface, setActiveSurface] = React.useState<PanelSurface>('cpanel');
+  const [activeSurface, setActiveSurface] = React.useState<PanelSurface>(() => {
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname.toLowerCase();
+      if (p.startsWith('/whm')) return 'whm';
+      if (p.startsWith('/store') || p.startsWith('/portal')) return 'store';
+      if (p.startsWith('/login')) return 'login';
+    }
+    return 'cpanel';
+  });
   const [activeSidebarItem, setActiveSidebarItem] =
     React.useState<NebulixSidebarSectionId>('dashboard');
   const [activeWhmSection, setActiveWhmSection] =

@@ -569,6 +569,67 @@ export function createLocalPanelHttpServer(
     const pathname = url.pathname;
 
     try {
+      const customerPanelDistDir = path.resolve(process.cwd(), 'apps/customer-panel/dist');
+      const customerPanelIndexHtml = path.join(customerPanelDistDir, 'index.html');
+
+      if (
+        cleanSlate &&
+        (req.method === 'GET' || req.method === 'HEAD') &&
+        pathname.startsWith('/assets/') &&
+        !pathname.includes('..')
+      ) {
+        const assetFilePath = path.join(customerPanelDistDir, pathname);
+        if (fs.existsSync(assetFilePath) && fs.statSync(assetFilePath).isFile()) {
+          const ext = path.extname(assetFilePath).toLowerCase();
+          const mimeType =
+            ext === '.js'
+              ? 'application/javascript; charset=utf-8'
+              : ext === '.css'
+                ? 'text/css; charset=utf-8'
+                : ext === '.svg'
+                  ? 'image/svg+xml'
+                  : 'application/octet-stream';
+          res.writeHead(200, {
+            'Content-Type': mimeType,
+            'Cache-Control': 'public, max-age=31536000, immutable',
+            'X-Content-Type-Options': 'nosniff',
+          });
+          if (req.method === 'HEAD') {
+            res.end();
+          } else {
+            res.end(fs.readFileSync(assetFilePath));
+          }
+          return;
+        }
+      }
+
+      if (
+        cleanSlate &&
+        (req.method === 'GET' || req.method === 'HEAD') &&
+        (pathname === '/' ||
+          pathname === '/index.html' ||
+          pathname === '/whm' ||
+          pathname === '/whm/' ||
+          pathname === '/store' ||
+          pathname === '/store/' ||
+          pathname === '/portal' ||
+          pathname === '/portal/' ||
+          pathname === '/login') &&
+        fs.existsSync(customerPanelIndexHtml)
+      ) {
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-cache',
+          'X-Content-Type-Options': 'nosniff',
+        });
+        if (req.method === 'HEAD') {
+          res.end();
+        } else {
+          res.end(fs.readFileSync(customerPanelIndexHtml, 'utf8'));
+        }
+        return;
+      }
+
       if ((req.method === 'GET' || req.method === 'HEAD') && (pathname === '/' || pathname === '/index.html')) {
         res.writeHead(200, {
           'Content-Type': 'text/html; charset=utf-8',
