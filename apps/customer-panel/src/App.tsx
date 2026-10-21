@@ -17,6 +17,12 @@ import {
   Mail,
   Database,
   Table2,
+  LogOut,
+  Terminal,
+  Server,
+  Layers,
+  ArrowRight,
+  Copy,
 } from 'lucide-react';
 import {
   getAuthorizedNavigationForRole,
@@ -30,8 +36,9 @@ import {
   StarBorder,
   TiltedCard,
   AnimatedContent,
+  SpotlightCard,
+  GradientText,
 } from '@garvix/ui-components';
-import { CUSTOMER_PANEL_APP_METADATA } from './index.js';
 import {
   NebulixSidebar,
   type NebulixSidebarSectionId,
@@ -51,8 +58,121 @@ import {
   type WhmCpanelAccountItem,
   type WhmServiceDaemonItem,
 } from './components/dashboard/NebulixWhmWorkspace.js';
+import {
+  NebulixMasterAdmin,
+  type GarvixLicensePlanConfig,
+  type IssuedCustomerLicenseRecord,
+} from './components/dashboard/NebulixMasterAdmin.js';
 
-type PanelSurface = 'cpanel' | 'whm' | 'store' | 'login';
+export type PanelSurface = 'store' | 'login' | 'cpanel' | 'whm' | 'admin';
+
+const PLANS_STORAGE_KEY = 'garvix_license_plans_v1';
+const LICENSES_STORAGE_KEY = 'garvix_customer_licenses_v1';
+
+export const DEFAULT_GARVIX_LICENSE_PLANS: GarvixLicensePlanConfig[] = [
+  {
+    code: 'CPANEL_SOLO',
+    name: 'Garvix cPanel Solo',
+    badge: '1 ACCOUNT · SOLO VPS',
+    monthlyInr: 499,
+    panelMode: 'ONLY_CPANEL',
+    maxAccounts: 1,
+    maxAccountsLabel: '1 cPanel Account (No WHM)',
+    bestFor: 'Single website owner or developer VPS',
+    popular: false,
+    features: [
+      '1 Server IPv4 License Activation',
+      'Direct cPanel Jupiter Dashboard (Port 2083)',
+      'Unlimited Domains, Subdomains & AutoSSL',
+      'Web Terminal, Git Deploy, Cron & API Tokens',
+    ],
+  },
+  {
+    code: 'WHM_ADMIN',
+    name: 'Garvix WHM Admin',
+    badge: 'UP TO 5 ACCOUNTS',
+    monthlyInr: 999,
+    panelMode: 'WHM_AND_CPANEL',
+    maxAccounts: 5,
+    maxAccountsLabel: 'Up to 5 cPanel Accounts + WHM',
+    bestFor: 'Freelancers & small web agencies',
+    popular: false,
+    features: [
+      '1 Server IPv4 License Activation',
+      'Full WHM Server Admin Panel (Port 2087)',
+      'Create Up to 5 Isolated cPanel Accounts',
+      '1-Click [cP] Open cPanel Single Sign-On',
+      'Root Web Terminal, WHM API & Malware Scanner',
+    ],
+  },
+  {
+    code: 'WHM_PRO',
+    name: 'Garvix WHM Pro',
+    badge: 'UP TO 30 ACCOUNTS',
+    monthlyInr: 1799,
+    panelMode: 'WHM_AND_CPANEL',
+    maxAccounts: 30,
+    maxAccountsLabel: 'Up to 30 cPanel Accounts + WHM',
+    bestFor: 'Agencies, resellers & multi-client servers',
+    popular: true,
+    features: [
+      '1 Server IPv4 License Activation',
+      'Full WHM Server Admin Panel (Port 2087)',
+      'Create Up to 30 Isolated cPanel Accounts',
+      '1-Click [cP] Open cPanel Single Sign-On',
+      'Root Web Terminal, WHM API & Malware Scanner',
+    ],
+  },
+  {
+    code: 'WHM_PREMIER',
+    name: 'Garvix WHM Premier',
+    badge: 'UNLIMITED ACCOUNTS',
+    monthlyInr: 2999,
+    panelMode: 'WHM_AND_CPANEL',
+    maxAccounts: 0,
+    maxAccountsLabel: 'Unlimited cPanel Accounts + WHM',
+    bestFor: 'Dedicated servers & hosting companies',
+    popular: false,
+    features: [
+      '1 Server IPv4 License Activation',
+      'Full WHM Server Admin Panel (Port 2087)',
+      'Create Unlimited Isolated cPanel Accounts',
+      '1-Click [cP] Open cPanel Single Sign-On',
+      'Root Web Terminal, WHM API & Malware Scanner',
+    ],
+  },
+];
+
+export const DEFAULT_CUSTOMER_LICENSES: IssuedCustomerLicenseRecord[] = [
+  {
+    id: 'lic-pro-default',
+    customerEmail: 'admin@garvixcloud.in',
+    password: 'password123',
+    planCode: 'WHM_PRO',
+    planName: 'Garvix WHM Pro',
+    panelMode: 'WHM_AND_CPANEL',
+    maxAccounts: 30,
+    serverIp: '200.234.39.100',
+    hostname: 'srv2075790.hstgr.cloud',
+    licenseKey: 'GVX-WHM_PRO-94CF-2026-ED25519',
+    status: 'ACTIVE',
+    createdAt: '2026-10-20',
+  },
+  {
+    id: 'lic-solo-default',
+    customerEmail: 'solo@garvixcloud.in',
+    password: 'password123',
+    planCode: 'CPANEL_SOLO',
+    planName: 'Garvix cPanel Solo',
+    panelMode: 'ONLY_CPANEL',
+    maxAccounts: 1,
+    serverIp: '200.234.39.100',
+    hostname: 'solo.garvixcloud.in',
+    licenseKey: 'GVX-CPANEL_SOLO-31A8-2026-ED25519',
+    status: 'ACTIVE',
+    createdAt: '2026-10-20',
+  },
+];
 
 interface GlobalSearchEntry {
   id: string;
@@ -247,14 +367,14 @@ interface HostedDbItem {
 }
 
 const INITIAL_DNS_RECORDS: DnsRecordItem[] = [
-  { id: 'dns-1', type: 'A', name: '@', value: '72.61.236.175', ttl: 3600 },
-  { id: 'dns-2', type: 'A', name: 'mail', value: '72.61.236.175', ttl: 3600 },
+  { id: 'dns-1', type: 'A', name: '@', value: '200.234.39.100', ttl: 3600 },
+  { id: 'dns-2', type: 'A', name: 'mail', value: '200.234.39.100', ttl: 3600 },
   { id: 'dns-3', type: 'MX', name: '@', value: '10 mail.garvixcloud.in.', ttl: 3600 },
   {
     id: 'dns-4',
     type: 'TXT',
     name: '@',
-    value: 'v=spf1 ip4:72.61.236.175 -all',
+    value: 'v=spf1 ip4:200.234.39.100 -all',
     ttl: 3600,
   },
   {
@@ -382,51 +502,98 @@ const INITIAL_WHM_SERVICES: WhmServiceDaemonItem[] = [
   },
 ];
 
-const STORE_PLANS = [
-  {
-    code: 'SOLO',
-    name: 'Garvix cPanel Solo',
-    accounts: 'Only cPanel (No WHM) · 1 cPanel Account',
-    priceInr: 399,
-    badge: 'ONLY cPANEL (1 ACCOUNT)',
-    popular: false,
-  },
-  {
-    code: 'ADMIN',
-    name: 'Garvix WHM + cPanel Admin',
-    accounts: 'WHM + Up to 5 cPanel Accounts',
-    priceInr: 699,
-    badge: 'WHM + 5 cPANEL',
-    popular: false,
-  },
-  {
-    code: 'PRO',
-    name: 'Garvix WHM + cPanel Pro',
-    accounts: 'WHM + Up to 30 cPanel Accounts',
-    priceInr: 1099,
-    badge: 'MOST POPULAR (WHM + cPANEL)',
-    popular: true,
-  },
-  {
-    code: 'PREMIER',
-    name: 'Garvix WHM + cPanel Premier',
-    accounts: 'WHM + Unlimited cPanel Accounts',
-    priceInr: 1499,
-    badge: 'WHM + UNLIMITED cPANEL',
-    popular: false,
-  },
-];
-
 export function CustomerPanelApp(): React.ReactElement {
+  // Default landing surface is the Public Home Page (`store`) unless URL explicitly points to /whm, /cpanel, /admin, or /login
   const [activeSurface, setActiveSurface] = React.useState<PanelSurface>(() => {
     if (typeof window !== 'undefined') {
       const p = window.location.pathname.toLowerCase();
+      if (p.startsWith('/admin')) return 'admin';
       if (p.startsWith('/whm')) return 'whm';
-      if (p.startsWith('/store') || p.startsWith('/portal')) return 'store';
+      if (p.startsWith('/cpanel')) return 'cpanel';
       if (p.startsWith('/login')) return 'login';
+      if (p.startsWith('/store') || p.startsWith('/portal')) return 'store';
     }
-    return 'cpanel';
+    return 'store';
   });
+
+  // License Plans & Customer Licenses state (persisted in localStorage so Master Admin changes stay saved)
+  const [licensePlans, setLicensePlans] = React.useState<GarvixLicensePlanConfig[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = window.localStorage.getItem(PLANS_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as GarvixLicensePlanConfig[];
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {
+        // ignore storage errors
+      }
+    }
+    return DEFAULT_GARVIX_LICENSE_PLANS;
+  });
+
+  const [customerLicenses, setCustomerLicenses] = React.useState<IssuedCustomerLicenseRecord[]>(
+    () => {
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = window.localStorage.getItem(LICENSES_STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw) as IssuedCustomerLicenseRecord[];
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          }
+        } catch {
+          // ignore storage errors
+        }
+      }
+      return DEFAULT_CUSTOMER_LICENSES;
+    }
+  );
+
+  // Active logged-in customer license (controls whether WHM is accessible and max cPanel account limit!)
+  const [activeCustomerLicense, setActiveCustomerLicense] =
+    React.useState<IssuedCustomerLicenseRecord>(() => DEFAULT_CUSTOMER_LICENSES[0]!);
+
+  const handleSavePlans = (nextPlans: GarvixLicensePlanConfig[]) => {
+    setLicensePlans(nextPlans);
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify(nextPlans));
+      } catch {
+        // ignore
+      }
+    }
+    // Keep activeCustomerLicense synced if its plan was updated
+    const updatedActivePlan = nextPlans.find((p) => p.code === activeCustomerLicense.planCode);
+    if (updatedActivePlan) {
+      setActiveCustomerLicense((prev) => ({
+        ...prev,
+        planName: updatedActivePlan.name,
+        panelMode: updatedActivePlan.panelMode,
+        maxAccounts: updatedActivePlan.maxAccounts,
+      }));
+    }
+  };
+
+  const handleResetDefaultPlans = () => {
+    handleSavePlans(DEFAULT_GARVIX_LICENSE_PLANS);
+    showToast('Reset all license plans and pricing to factory defaults.');
+  };
+
+  const handleSaveCustomerLicenses = (nextLicenses: IssuedCustomerLicenseRecord[]) => {
+    setCustomerLicenses(nextLicenses);
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem(LICENSES_STORAGE_KEY, JSON.stringify(nextLicenses));
+      } catch {
+        // ignore
+      }
+    }
+    const updatedSelf = nextLicenses.find((l) => l.id === activeCustomerLicense.id);
+    if (updatedSelf) {
+      setActiveCustomerLicense(updatedSelf);
+    }
+  };
+
   const [activeSidebarItem, setActiveSidebarItem] =
     React.useState<NebulixSidebarSectionId>('dashboard');
   const [activeWhmSection, setActiveWhmSection] =
@@ -451,13 +618,18 @@ export function CustomerPanelApp(): React.ReactElement {
   const matchedSearchResults = React.useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return [];
-    return GLOBAL_SEARCH_CATALOG.filter(
-      (entry) =>
+    return GLOBAL_SEARCH_CATALOG.filter((entry) => {
+      // If customer is on an ONLY_CPANEL plan, hide WHM search items
+      if (activeCustomerLicense.panelMode === 'ONLY_CPANEL' && entry.surface === 'whm') {
+        return false;
+      }
+      return (
         entry.title.toLowerCase().includes(q) ||
         entry.subtitle.toLowerCase().includes(q) ||
         entry.keywords.some((kw) => kw.includes(q) || q.includes(kw))
-    );
-  }, [searchQuery]);
+      );
+    });
+  }, [searchQuery, activeCustomerLicense.panelMode]);
 
   const handleSelectSearchResult = (entry: GlobalSearchEntry) => {
     setActiveSurface(entry.surface);
@@ -508,15 +680,18 @@ export function CustomerPanelApp(): React.ReactElement {
   const [newDbUser, setNewDbUser] = React.useState<string>('crm_admin');
   const [newDbPass, setNewDbPass] = React.useState<string>('Db!9xP#4wL$8vK2');
 
-  const [checkoutPlan, setCheckoutPlan] = React.useState<(typeof STORE_PLANS)[number] | null>(
-    null
-  );
+  // Public Store Checkout & Newly Purchased License state
+  const [checkoutPlan, setCheckoutPlan] = React.useState<GarvixLicensePlanConfig | null>(null);
   const [checkoutEmail, setCheckoutEmail] = React.useState<string>('customer@company.in');
-  const [checkoutIp, setCheckoutIp] = React.useState<string>('72.61.236.175');
-  const [issuedStoreKey, setIssuedStoreKey] = React.useState<string>(
-    'GVX-PRO-882A-94CF-E25519'
-  );
-  const [loginMode, setLoginMode] = React.useState<'CUSTOMER' | 'ADMIN'>('CUSTOMER');
+  const [checkoutPassword, setCheckoutPassword] = React.useState<string>('Garvix#2026');
+  const [checkoutIp, setCheckoutIp] = React.useState<string>('200.234.39.100');
+  const [newlyPurchasedLicense, setNewlyPurchasedLicense] =
+    React.useState<IssuedCustomerLicenseRecord | null>(null);
+
+  // Login Portal state
+  const [loginMode, setLoginMode] = React.useState<'CUSTOMER' | 'MASTER_ADMIN'>('CUSTOMER');
+  const [loginEmailInput, setLoginEmailInput] = React.useState<string>('admin@garvixcloud.in');
+  const [loginPasswordInput, setLoginPasswordInput] = React.useState<string>('password123');
   const [toastBanner, setToastBanner] = React.useState<string | null>(null);
 
   const authorizedNavItems = React.useMemo(
@@ -526,7 +701,63 @@ export function CustomerPanelApp(): React.ReactElement {
 
   const showToast = (msg: string) => {
     setToastBanner(msg);
-    setTimeout(() => setToastBanner(null), 3500);
+    setTimeout(() => setToastBanner(null), 4000);
+  };
+
+  // Plan-aware login handler: routes ONLY_CPANEL -> cPanel (2083) and WHM_AND_CPANEL -> WHM (2087)
+  const loginWithCustomerLicense = (license: IssuedCustomerLicenseRecord) => {
+    if (license.status === 'SUSPENDED') {
+      showToast(`License ${license.licenseKey} is currently SUSPENDED. Contact Master Admin.`);
+      return;
+    }
+    setActiveCustomerLicense(license);
+    const domainGuess = license.customerEmail.includes('@')
+      ? license.customerEmail.split('@')[1] || 'garvixcloud.in'
+      : 'garvixcloud.in';
+    const userGuess =
+      license.customerEmail
+        .split('@')[0]
+        ?.toLowerCase()
+        .replace(/[^a-z0-9]/g, '')
+        .slice(0, 12) || 'garvixprod';
+
+    if (license.panelMode === 'ONLY_CPANEL') {
+      setActiveCpanelDomain(domainGuess);
+      setActiveCpanelUser(userGuess);
+      setActiveSidebarItem('dashboard');
+      setActiveSurface('cpanel');
+      showToast(
+        `Logged in to ${license.planName} (1 Account Solo) → Opened cPanel Dashboard (Port 2083).`
+      );
+    } else {
+      setActiveWhmSection('whm-overview');
+      setActiveSurface('whm');
+      const limitStr =
+        license.maxAccounts === 0 ? 'Unlimited' : `${license.maxAccounts}`;
+      showToast(
+        `Logged in to ${license.planName} → Opened WHM Server Admin (Port 2087 · Limit: ${limitStr} cPanel Accounts).`
+      );
+    }
+  };
+
+  const handleLoginFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (loginMode === 'MASTER_ADMIN') {
+      setActiveSurface('admin');
+      showToast(
+        'Signed in to Garvix Master Admin Panel — Control all Plans, Pricing & cPanel Account Limits.'
+      );
+      return;
+    }
+
+    const cleanEmail = loginEmailInput.trim().toLowerCase();
+    const matched =
+      customerLicenses.find((l) => l.customerEmail.toLowerCase() === cleanEmail) ||
+      customerLicenses[0];
+
+    if (matched) {
+      loginWithCustomerLicense(matched);
+    }
   };
 
   const handleAddDnsRecord = (e: React.FormEvent) => {
@@ -613,9 +844,30 @@ export function CustomerPanelApp(): React.ReactElement {
     e.preventDefault();
     if (!checkoutPlan) return;
     const rand = Math.random().toString(16).substring(2, 6).toUpperCase();
-    setIssuedStoreKey(`GVX-${checkoutPlan.code}-${rand}-77E1-E25519`);
+    const newKey = `GVX-${checkoutPlan.code}-${rand}-2026-ED25519`;
+    const createdLicense: IssuedCustomerLicenseRecord = {
+      id: `lic-${Date.now()}`,
+      customerEmail: checkoutEmail.trim().toLowerCase() || 'customer@company.in',
+      password: checkoutPassword.trim() || 'Garvix#2026',
+      planCode: checkoutPlan.code,
+      planName: checkoutPlan.name,
+      panelMode: checkoutPlan.panelMode,
+      maxAccounts: checkoutPlan.maxAccounts,
+      serverIp: checkoutIp.trim() || '200.234.39.100',
+      hostname: 'srv2075790.hstgr.cloud',
+      licenseKey: newKey,
+      status: 'ACTIVE',
+      createdAt: 'Just now',
+    };
+
+    handleSaveCustomerLicenses([createdLicense, ...customerLicenses]);
+    setNewlyPurchasedLicense(createdLicense);
+    setLoginEmailInput(createdLicense.customerEmail);
+    setLoginPasswordInput(createdLicense.password);
     setCheckoutPlan(null);
-    showToast(`Razorpay payment verified! Issued license key for ${checkoutPlan.name}.`);
+    showToast(
+      `Razorpay payment verified! Issued ${createdLicense.planName} license key (${newKey}) for ${createdLicense.customerEmail}.`
+    );
   };
 
   // WHM Handlers
@@ -689,174 +941,323 @@ export function CustomerPanelApp(): React.ReactElement {
     }
   };
 
+  const isPublicOrAdminSurface =
+    activeSurface === 'store' || activeSurface === 'login' || activeSurface === 'admin';
+  const canAccessWhm = activeCustomerLicense.panelMode === 'WHM_AND_CPANEL';
+
   return (
     <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-[#F7F6FD] via-[#F4F2FC] to-[#EEF2FF] text-slate-900">
       <div className="flex min-h-screen">
-        {/* SECTION A: Dynamic Sidebar — Renders WHM Sidebar in WHM mode, or cPanel Sidebar in cPanel mode */}
-        {activeSurface === 'whm' ? (
-          <NebulixWhmSidebar
-            activeSection={activeWhmSection}
-            onSelectSection={(sec) => setActiveWhmSection(sec)}
-            totalAccounts={whmAccounts.length}
-            mobileOpen={mobileSidebarOpen}
-            onCloseMobile={() => setMobileSidebarOpen(false)}
-            onSwitchToCpanel={() => setActiveSurface('cpanel')}
-          />
-        ) : (
-          <NebulixSidebar
-            activeItem={activeSidebarItem}
-            onSelectItem={(item) => {
-              setActiveSidebarItem(item);
-              setActiveSurface('cpanel');
-            }}
-            activeRole={activeRole}
-            authorizedNavItems={authorizedNavItems}
-            activeCpanelDomain={activeCpanelDomain}
-            activeCpanelUser={activeCpanelUser}
-            onSwitchToWhm={() => setActiveSurface('whm')}
-            mobileOpen={mobileSidebarOpen}
-            onCloseMobile={() => setMobileSidebarOpen(false)}
-          />
-        )}
+        {/* SECTION A: Dynamic Sidebar — Shown only inside WHM or cPanel workspaces */}
+        {!isPublicOrAdminSurface &&
+          (activeSurface === 'whm' ? (
+            <NebulixWhmSidebar
+              activeSection={activeWhmSection}
+              onSelectSection={(sec) => setActiveWhmSection(sec)}
+              totalAccounts={whmAccounts.length}
+              maxAccountsLimit={activeCustomerLicense.maxAccounts}
+              licensePlanName={activeCustomerLicense.planName}
+              serverIp={activeCustomerLicense.serverIp}
+              mobileOpen={mobileSidebarOpen}
+              onCloseMobile={() => setMobileSidebarOpen(false)}
+              onSwitchToCpanel={() => setActiveSurface('cpanel')}
+            />
+          ) : (
+            <NebulixSidebar
+              activeItem={activeSidebarItem}
+              onSelectItem={(item) => {
+                setActiveSidebarItem(item);
+                setActiveSurface('cpanel');
+              }}
+              activeRole={activeRole}
+              authorizedNavItems={authorizedNavItems}
+              activeCpanelDomain={activeCpanelDomain}
+              activeCpanelUser={activeCpanelUser}
+              onSwitchToWhm={canAccessWhm ? () => setActiveSurface('whm') : undefined}
+              mobileOpen={mobileSidebarOpen}
+              onCloseMobile={() => setMobileSidebarOpen(false)}
+            />
+          ))}
 
         {/* Right Content Area */}
         <div className="flex min-w-0 flex-1 flex-col">
-          {/* Top Light-Theme cPanel & WHM Header */}
+          {/* Top Header — Adapts between Public Home Page / Login vs Logged-In WHM / cPanel / Master Admin */}
           <header className="sticky top-0 z-30 flex min-h-16 flex-wrap items-center justify-between gap-2 border-b border-indigo-100/80 bg-white/90 px-3 py-2.5 backdrop-blur-xl sm:px-8">
             <div className="flex items-center gap-2.5">
+              {!isPublicOrAdminSurface && (
+                <button
+                  type="button"
+                  onClick={() => setMobileSidebarOpen(true)}
+                  aria-label="Open navigation sidebar"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-indigo-100 bg-white text-slate-700 shadow-xs hover:bg-indigo-50 lg:hidden"
+                >
+                  <Menu className="h-5 w-5" />
+                </button>
+              )}
+
+              {/* Brand Logo (Clicking goes to Public Home Page when in store/login, or stays in panel) */}
               <button
                 type="button"
-                onClick={() => setMobileSidebarOpen(true)}
-                aria-label="Open navigation sidebar"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-indigo-100 bg-white text-slate-700 shadow-xs hover:bg-indigo-50 lg:hidden"
+                onClick={() => setActiveSurface('store')}
+                className="flex items-center gap-2.5 text-left"
               >
-                <Menu className="h-5 w-5" />
-              </button>
-              <span className="font-display text-sm font-extrabold tracking-tight text-slate-900 lg:hidden">
-                {activeSurface === 'whm' ? 'GARVIX WHM' : 'GARVIX cPanel'}
-              </span>
-
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="search"
-                  value={searchQuery}
-                  onFocus={() => setSearchOpen(true)}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setSearchOpen(true);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && matchedSearchResults.length > 0) {
-                      e.preventDefault();
-                      handleSelectSearchResult(matchedSearchResults[0]!);
-                    } else if (e.key === 'Escape') {
-                      setSearchOpen(false);
-                    }
-                  }}
-                  aria-label="Search cPanel or WHM tools"
-                  placeholder="Search api, terminal, cron, php, sql, file, email, whm..."
-                  className="h-10 w-52 rounded-2xl border border-indigo-100/90 bg-[#F7F6FD] pl-10 pr-4 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/15 sm:w-72 md:w-96"
-                />
-
-                {searchOpen && searchQuery.trim().length > 0 && (
-                  <div className="absolute left-0 top-12 z-50 w-80 max-w-[92vw] overflow-hidden rounded-2xl border border-indigo-100 bg-white shadow-2xl sm:w-[430px]">
-                    <div className="flex items-center justify-between border-b border-slate-100 bg-[#FAF9FE] px-3.5 py-2 text-[11px] font-bold uppercase tracking-wider text-indigo-700">
-                      <span>Search Results ({matchedSearchResults.length})</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSearchOpen(false);
-                          setSearchQuery('');
-                        }}
-                        className="text-slate-400 hover:text-slate-700"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                    {matchedSearchResults.length === 0 ? (
-                      <div className="p-4 text-xs text-slate-500">
-                        No matching cPanel or WHM tool found for &ldquo;{searchQuery}&rdquo;. Try{' '}
-                        <strong>terminal</strong>, <strong>api</strong>, <strong>sql</strong>,{' '}
-                        <strong>file</strong>, or <strong>whm</strong>.
-                      </div>
-                    ) : (
-                      <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto">
-                        {matchedSearchResults.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => handleSelectSearchResult(item)}
-                            className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition hover:bg-indigo-50/70"
-                          >
-                            <div>
-                              <div className="text-xs font-bold text-slate-900">{item.title}</div>
-                              <div className="mt-0.5 text-[11px] text-slate-500">
-                                {item.subtitle}
-                              </div>
-                            </div>
-                            <span className="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
-                              {item.badge}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 via-indigo-600 to-blue-600 text-xs font-extrabold text-white shadow-sm">
+                  {activeSurface === 'whm'
+                    ? 'WHM'
+                    : activeSurface === 'cpanel'
+                      ? 'cP'
+                      : activeSurface === 'admin'
+                        ? 'ADM'
+                        : 'GVX'}
+                </div>
+                <div className="hidden sm:block">
+                  <div className="font-display text-sm font-extrabold tracking-tight text-slate-900">
+                    {activeSurface === 'whm'
+                      ? 'GARVIX WHM'
+                      : activeSurface === 'cpanel'
+                        ? 'GARVIX cPanel'
+                        : activeSurface === 'admin'
+                          ? 'GARVIX Master Admin'
+                          : 'GARVIX Cloud'}
                   </div>
-                )}
-              </div>
+                  <div className="text-[10px] font-semibold text-indigo-600">
+                    {activeSurface === 'whm'
+                      ? `Port 2087 · ${activeCustomerLicense.planName}`
+                      : activeSurface === 'cpanel'
+                        ? `Port 2083 · ${activeCpanelDomain}`
+                        : activeSurface === 'admin'
+                          ? 'Owner Plan & Pricing Control'
+                          : 'Self-Hosted WHM & cPanel Licenses'}
+                  </div>
+                </div>
+              </button>
+
+              {/* Global Search Bar inside WHM & cPanel */}
+              {!isPublicOrAdminSurface && (
+                <div className="relative ml-1 sm:ml-3">
+                  <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onFocus={() => setSearchOpen(true)}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setSearchOpen(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && matchedSearchResults.length > 0) {
+                        e.preventDefault();
+                        handleSelectSearchResult(matchedSearchResults[0]!);
+                      } else if (e.key === 'Escape') {
+                        setSearchOpen(false);
+                      }
+                    }}
+                    aria-label="Search cPanel or WHM tools"
+                    placeholder="Search api, terminal, cron, php, sql, file, email, whm..."
+                    className="h-10 w-48 rounded-2xl border border-indigo-100/90 bg-[#F7F6FD] pl-10 pr-4 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/15 sm:w-64 md:w-80"
+                  />
+
+                  {searchOpen && searchQuery.trim().length > 0 && (
+                    <div className="absolute left-0 top-12 z-50 w-80 max-w-[92vw] overflow-hidden rounded-2xl border border-indigo-100 bg-white shadow-2xl sm:w-[430px]">
+                      <div className="flex items-center justify-between border-b border-slate-100 bg-[#FAF9FE] px-3.5 py-2 text-[11px] font-bold uppercase tracking-wider text-indigo-700">
+                        <span>Search Results ({matchedSearchResults.length})</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchOpen(false);
+                            setSearchQuery('');
+                          }}
+                          className="text-slate-400 hover:text-slate-700"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      {matchedSearchResults.length === 0 ? (
+                        <div className="p-4 text-xs text-slate-500">
+                          No matching tool found for &ldquo;{searchQuery}&rdquo;. Try{' '}
+                          <strong>terminal</strong>, <strong>api</strong>, <strong>sql</strong>,{' '}
+                          <strong>file</strong>, or <strong>email</strong>.
+                        </div>
+                      ) : (
+                        <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto">
+                          {matchedSearchResults.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => handleSelectSearchResult(item)}
+                              className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition hover:bg-indigo-50/70"
+                            >
+                              <div>
+                                <div className="text-xs font-bold text-slate-900">{item.title}</div>
+                                <div className="mt-0.5 text-[11px] text-slate-500">
+                                  {item.subtitle}
+                                </div>
+                              </div>
+                              <span className="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                                {item.badge}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
+            {/* Right Header Navigation Controls */}
             <div className="flex items-center gap-1.5 sm:gap-2.5">
-              {/* Surface Switcher: cPanel, WHM, License Store, Login */}
-              <div className="flex rounded-xl border border-indigo-100 bg-[#F7F6FD] p-0.5 sm:p-1">
-                {(
-                  [
-                    { id: 'cpanel', label: 'cPanel' },
-                    { id: 'whm', label: 'WHM' },
-                    { id: 'store', label: 'License Store' },
-                    { id: 'login', label: 'Login' },
-                  ] as const
-                ).map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => setActiveSurface(s.id)}
-                    className={`rounded-lg px-2.5 py-1 text-[11px] sm:px-3 sm:text-xs font-bold transition-all ${
-                      activeSurface === s.id
-                        ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-xs'
-                        : 'text-slate-600 hover:text-indigo-900'
-                    }`}
+              {activeSurface === 'store' || activeSurface === 'login' ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant={activeSurface === 'store' ? 'nebulix' : 'outline'}
+                    onClick={() => setActiveSurface('store')}
                   >
-                    {s.label}
+                    <Layers className="h-3.5 w-3.5" /> Home (Plans &amp; Pricing)
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={
+                      activeSurface === 'login' && loginMode === 'CUSTOMER' ? 'nebulix' : 'outline'
+                    }
+                    onClick={() => {
+                      setLoginMode('CUSTOMER');
+                      setActiveSurface('login');
+                    }}
+                  >
+                    <Lock className="h-3.5 w-3.5" /> Customer Login
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setActiveSurface('admin');
+                      showToast(
+                        'Opened Garvix Master Admin Panel — Manage Plans, Pricing & Account Limits.'
+                      );
+                    }}
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5 text-violet-600" /> Master Admin (Plans &amp; Pricing)
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  {/* Logged-In Switcher (Respects Customer Plan Mode!) */}
+                  <div className="flex rounded-xl border border-indigo-100 bg-[#F7F6FD] p-0.5 sm:p-1">
+                    {activeSurface === 'admin' ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setActiveSurface('admin')}
+                          className="rounded-lg bg-gradient-to-r from-violet-600 to-blue-600 px-3 py-1 text-xs font-bold text-white shadow-xs"
+                        >
+                          Master Admin
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveSurface('store')}
+                          className="rounded-lg px-3 py-1 text-xs font-bold text-slate-600 hover:text-indigo-900"
+                        >
+                          Public Store
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveSurface('whm')}
+                          className="rounded-lg px-3 py-1 text-xs font-bold text-slate-600 hover:text-indigo-900"
+                        >
+                          WHM (2087)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveSurface('cpanel')}
+                          className="rounded-lg px-3 py-1 text-xs font-bold text-slate-600 hover:text-indigo-900"
+                        >
+                          cPanel (2083)
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        {canAccessWhm && (
+                          <button
+                            type="button"
+                            onClick={() => setActiveSurface('whm')}
+                            className={`rounded-lg px-2.5 py-1 text-[11px] sm:px-3 sm:text-xs font-bold transition-all ${
+                              activeSurface === 'whm'
+                                ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-xs'
+                                : 'text-slate-600 hover:text-indigo-900'
+                            }`}
+                          >
+                            WHM (2087)
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setActiveSurface('cpanel')}
+                          className={`rounded-lg px-2.5 py-1 text-[11px] sm:px-3 sm:text-xs font-bold transition-all ${
+                            activeSurface === 'cpanel'
+                              ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-indigo-900'
+                          }`}
+                        >
+                          cPanel (2083)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveSurface('admin')}
+                          className="rounded-lg px-2.5 py-1 text-[11px] sm:px-3 sm:text-xs font-bold text-indigo-700 hover:bg-indigo-50"
+                        >
+                          Master Admin
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    aria-label="Notifications"
+                    className="relative hidden h-9 w-9 items-center justify-center rounded-xl border border-indigo-100 bg-white text-slate-600 hover:bg-indigo-50 hover:text-indigo-700 sm:inline-flex"
+                  >
+                    <Bell className="h-4 w-4" />
+                    <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-violet-600" />
                   </button>
-                ))}
-              </div>
 
-              <button
-                type="button"
-                aria-label="Notifications"
-                className="relative hidden h-9 w-9 items-center justify-center rounded-xl border border-indigo-100 bg-white text-slate-600 hover:bg-indigo-50 hover:text-indigo-700 sm:inline-flex"
-              >
-                <Bell className="h-4 w-4" />
-                <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-violet-600" />
-              </button>
+                  {/* User Identity Badge */}
+                  <div className="hidden items-center gap-2 rounded-2xl border border-indigo-100 bg-white px-3 py-1.5 shadow-2xs md:flex">
+                    <div className="text-left">
+                      <div className="text-xs font-bold leading-none text-slate-900">
+                        {activeSurface === 'admin'
+                          ? 'Garvix Super Admin'
+                          : activeCustomerLicense.customerEmail}
+                      </div>
+                      <div className="mt-0.5 text-[10px] font-semibold text-indigo-600">
+                        {activeSurface === 'admin'
+                          ? 'Master License Controller'
+                          : `${activeCustomerLicense.planName} (${
+                              activeCustomerLicense.panelMode === 'ONLY_CPANEL'
+                                ? '1 Account Solo'
+                                : activeCustomerLicense.maxAccounts === 0
+                                  ? 'Unlimited Accounts'
+                                  : `Max ${activeCustomerLicense.maxAccounts} Accounts`
+                            })`}
+                      </div>
+                    </div>
+                  </div>
 
-              <div className="hidden items-center gap-2.5 rounded-2xl border border-indigo-100 bg-white px-3 py-1.5 shadow-2xs sm:flex">
-                <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-blue-600 text-xs font-bold text-white">
-                  {activeSurface === 'whm' ? 'WHM' : 'cP'}
-                </div>
-                <div className="hidden text-left md:block">
-                  <div className="text-xs font-bold leading-none text-slate-900">
-                    {activeSurface === 'whm' ? 'WHM Root Admin' : activeCpanelUser}
-                  </div>
-                  <div className="mt-0.5 text-[10px] font-medium text-indigo-600">
-                    {activeSurface === 'whm'
-                      ? 'WebHost Manager (2087)'
-                      : `${activeCpanelDomain} (2083)`}
-                  </div>
-                </div>
-              </div>
+                  {/* Logout Button -> Returns to Public Home Page */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setActiveSurface('store');
+                      showToast('Logged out successfully. Returned to Public Home Page.');
+                    }}
+                  >
+                    <LogOut className="h-3.5 w-3.5 text-rose-600" /> Logout
+                  </Button>
+                </>
+              )}
             </div>
           </header>
 
@@ -880,10 +1281,326 @@ export function CustomerPanelApp(): React.ReactElement {
           {/* Main Workspace Container */}
           <main className="mx-auto w-full max-w-[1400px] min-w-0 flex-1 space-y-8 px-4 py-6 sm:px-8 sm:py-8">
             {/* =================================================================
-                SURFACE 1: GARVIX cPANEL (DASHBOARD + ALL 8 cPANEL TOOLS)
+                SURFACE 0: PUBLIC HOME PAGE (PLANS & PRICING + SSH INSTALL + LOGIN)
+               ================================================================= */}
+            {activeSurface === 'store' && (
+              <AnimatedContent className="space-y-10">
+                {/* Public Home Page Hero */}
+                <AuroraBackground className="p-6 sm:p-10">
+                  <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
+                    <div className="space-y-4">
+                      <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-indigo-200/80 bg-white/90 px-3.5 py-1.5 text-xs font-semibold text-indigo-700 shadow-xs">
+                        <Sparkles className="h-3.5 w-3.5 text-violet-600" />
+                        <span>GARVIX SELF-HOSTED CONTROL PANEL SOFTWARE</span>
+                        <span className="text-slate-300">•</span>
+                        <GradientText
+                          colors={['#7C3AED', '#4F46E5', '#2563EB', '#7C3AED']}
+                          className="text-xs font-bold"
+                        >
+                          AlmaLinux 10 · Nginx HTTP/3 · Ed25519 Licensing
+                        </GradientText>
+                      </div>
+
+                      <h1 className="font-display text-2xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
+                        <BlurText text="Choose Your Garvix cPanel Solo or WHM + cPanel Server License" />
+                      </h1>
+
+                      <p className="max-w-2xl text-xs leading-relaxed text-slate-600 sm:text-sm">
+                        Install Garvix on your own Linux VPS or Dedicated Server. Buy{' '}
+                        <strong>cPanel Solo (1 Account)</strong> to get a direct cPanel dashboard
+                        (`Port 2083`), or choose <strong>WHM + cPanel</strong> (`Port 2087`) to
+                        create and manage multiple isolated cPanel accounts on your server.
+                      </p>
+
+                      <div className="flex flex-wrap items-center gap-3 pt-1">
+                        <Button
+                          variant="nebulix"
+                          onClick={() => {
+                            setLoginMode('CUSTOMER');
+                            setActiveSurface('login');
+                          }}
+                        >
+                          <Lock className="h-4 w-4" /> Already Have a License? Login Here
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => setActiveSurface('admin')}
+                        >
+                          <ShieldCheck className="h-4 w-4 text-violet-600" /> Master Admin: Edit Plans, Pricing &amp; Account Limits
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="w-full max-w-sm rounded-2xl border border-indigo-100 bg-white/95 p-5 shadow-sm space-y-2.5">
+                      <div className="text-xs font-extrabold uppercase tracking-wider text-indigo-700">
+                        How Login Works After Buying a Plan
+                      </div>
+                      <div className="rounded-xl border border-indigo-100 bg-[#FAF9FE] p-3 text-xs">
+                        <div className="font-bold text-slate-900">
+                          1. If you buy cPanel Solo (1 Account):
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-slate-600">
+                          Your login opens <strong>cPanel Dashboard (Port 2083)</strong> directly for
+                          your single account (no WHM needed).
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-indigo-100 bg-[#FAF9FE] p-3 text-xs">
+                        <div className="font-bold text-slate-900">
+                          2. If you buy WHM + cPanel (Multiple Accounts):
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-slate-600">
+                          Your login opens <strong>WHM Server Admin (Port 2087)</strong> where you
+                          can create cPanel accounts up to your plan limit &amp; click{' '}
+                          <strong>[cP] Open cPanel</strong> anytime.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </AuroraBackground>
+
+                {/* Newly Purchased License Activation Banner (Shown right after Checkout!) */}
+                {newlyPurchasedLicense && (
+                  <SpotlightCard className="border-2 border-emerald-500 bg-emerald-50/40 p-6 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                        <div>
+                          <Badge variant="success">LICENSE ACTIVATED &amp; READY FOR LOGIN</Badge>
+                          <h2 className="mt-1 font-display text-lg font-extrabold text-slate-900">
+                            Congratulations! Your {newlyPurchasedLicense.planName} License is Active
+                          </h2>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="nebulix"
+                          onClick={() => loginWithCustomerLicense(newlyPurchasedLicense)}
+                        >
+                          <ArrowRight className="h-4 w-4" /> Open Your{' '}
+                          {newlyPurchasedLicense.panelMode === 'ONLY_CPANEL'
+                            ? 'cPanel Dashboard (Port 2083)'
+                            : 'WHM Server Admin (Port 2087)'}{' '}
+                          Now
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setLoginMode('CUSTOMER');
+                            setActiveSurface('login');
+                          }}
+                        >
+                          Go to Login Page
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="rounded-xl border border-indigo-100 bg-white p-4 text-xs space-y-1.5">
+                        <div className="font-bold text-slate-700">Your Login &amp; License Details:</div>
+                        <div>
+                          Login Email: <strong className="font-mono">{newlyPurchasedLicense.customerEmail}</strong>
+                        </div>
+                        <div>
+                          Bound Server IP: <strong className="font-mono">{newlyPurchasedLicense.serverIp}</strong>
+                        </div>
+                        <div>
+                          Issued Key:{' '}
+                          <strong className="font-mono text-indigo-700">
+                            <DecryptedText text={newlyPurchasedLicense.licenseKey} />
+                          </strong>
+                        </div>
+                        <div>
+                          Panel Access:{' '}
+                          <strong className="text-emerald-700">
+                            {newlyPurchasedLicense.panelMode === 'ONLY_CPANEL'
+                              ? 'Direct cPanel Only (1 Account)'
+                              : `WHM + Up to ${newlyPurchasedLicense.maxAccounts === 0 ? 'Unlimited' : newlyPurchasedLicense.maxAccounts} cPanel Accounts`}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-indigo-100 bg-slate-900 p-4 text-xs text-slate-100 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-indigo-300">
+                            1-Line AlmaLinux 10 SSH Install Command:
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              showToast('Copied 1-line SSH installer command to clipboard!')
+                            }
+                            className="inline-flex items-center gap-1 rounded bg-white/10 px-2 py-0.5 text-[11px] font-bold text-white hover:bg-white/20"
+                          >
+                            <Copy className="h-3 w-3" /> Copy Command
+                          </button>
+                        </div>
+                        <pre className="overflow-x-auto font-mono text-[11px] text-emerald-400">
+                          {`curl -sSL https://get.garvix.io/install.sh | sudo bash -s -- \\\n  --license=${newlyPurchasedLicense.licenseKey} \\\n  --ip=${newlyPurchasedLicense.serverIp}`}
+                        </pre>
+                      </div>
+                    </div>
+                  </SpotlightCard>
+                )}
+
+                {/* Dynamic License Plans Grid (Controlled from Master Admin Panel) */}
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-end justify-between gap-2">
+                    <div>
+                      <h2 className="font-display text-xl font-extrabold text-slate-900">
+                        Software License Plans &amp; Monthly Pricing
+                      </h2>
+                      <p className="text-xs text-slate-500">
+                        All prices and cPanel account limits below are dynamically controlled from
+                        the <strong>Master Admin Panel</strong>.
+                      </p>
+                    </div>
+                    <Badge variant="secondary">SAC 998315 · Instant Ed25519 License Key</Badge>
+                  </div>
+
+                  <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                    {licensePlans.map((plan) => (
+                      <TiltedCard key={plan.code} maxTiltDeg={3}>
+                        <StarBorder
+                          color={plan.popular ? '#6366F1' : '#C7D2FE'}
+                          className="h-full"
+                        >
+                          <div className="flex h-full flex-col justify-between rounded-[15px] bg-white p-5">
+                            <div>
+                              <div className="flex items-center justify-between gap-1">
+                                <Badge variant={plan.popular ? 'orange' : 'secondary'}>
+                                  {plan.badge}
+                                </Badge>
+                                {plan.popular && (
+                                  <span className="text-[10px] font-extrabold uppercase text-indigo-600">
+                                    ★ Popular
+                                  </span>
+                                )}
+                              </div>
+
+                              <h3 className="mt-3 font-display text-lg font-extrabold text-slate-900">
+                                {plan.name}
+                              </h3>
+                              <p className="mt-0.5 text-[11px] text-slate-500">{plan.bestFor}</p>
+
+                              <div className="mt-3 font-display text-3xl font-extrabold text-slate-900">
+                                ₹{plan.monthlyInr.toLocaleString('en-IN')}
+                                <span className="text-xs font-medium text-slate-500">
+                                  {' '}
+                                  / month
+                                </span>
+                              </div>
+
+                              <div className="mt-2 rounded-xl border border-indigo-100 bg-indigo-50/70 px-3 py-2 text-xs font-bold text-indigo-800">
+                                {plan.maxAccountsLabel}
+                              </div>
+
+                              <div className="mt-2 text-[11px] font-semibold text-slate-600">
+                                Login Opens:{' '}
+                                <strong className="text-indigo-700">
+                                  {plan.panelMode === 'ONLY_CPANEL'
+                                    ? 'cPanel Only (Port 2083)'
+                                    : 'WHM (Port 2087) + cPanel'}
+                                </strong>
+                              </div>
+
+                              <ul className="mt-4 space-y-2 border-t border-slate-100 pt-3 text-xs text-slate-600">
+                                {plan.features.map((feat) => (
+                                  <li key={feat} className="flex items-start gap-2">
+                                    <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                                    <span>{feat}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+
+                            <Button
+                              variant={plan.popular ? 'nebulix' : 'outline'}
+                              className="mt-6 w-full"
+                              onClick={() => setCheckoutPlan(plan)}
+                            >
+                              <CreditCard className="h-4 w-4" />
+                              Buy {plan.name}
+                            </Button>
+                          </div>
+                        </StarBorder>
+                      </TiltedCard>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3-Step Installation & Login Guide */}
+                <div className="grid gap-4 md:grid-cols-3">
+                  <SpotlightCard className="p-5 space-y-2">
+                    <div className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-100 font-display text-sm font-extrabold text-indigo-700">
+                      1
+                    </div>
+                    <h3 className="font-display text-sm font-extrabold text-slate-900">
+                      Buy Plan &amp; Bind Server IPv4
+                    </h3>
+                    <p className="text-xs text-slate-600">
+                      Select <strong>cPanel Solo</strong> (1 account) or <strong>WHM + cPanel</strong>{' '}
+                      (multiple accounts), enter your server IP (`200.234.39.100`), and create your
+                      login credentials.
+                    </p>
+                  </SpotlightCard>
+
+                  <SpotlightCard className="p-5 space-y-2">
+                    <div className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-100 font-display text-sm font-extrabold text-indigo-700">
+                      2
+                    </div>
+                    <h3 className="font-display text-sm font-extrabold text-slate-900">
+                      Run 1-Line SSH Installer on VPS
+                    </h3>
+                    <p className="text-xs text-slate-600">
+                      Paste the 1-line installer command on your fresh AlmaLinux 10 server. It
+                      configures Nginx, PHP-FPM, MariaDB/PostgreSQL, Mail, and verifies your Ed25519
+                      license.
+                    </p>
+                  </SpotlightCard>
+
+                  <SpotlightCard className="p-5 space-y-2">
+                    <div className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-100 font-display text-sm font-extrabold text-indigo-700">
+                      3
+                    </div>
+                    <h3 className="font-display text-sm font-extrabold text-slate-900">
+                      Login to WHM or cPanel
+                    </h3>
+                    <p className="text-xs text-slate-600">
+                      Click <strong>Customer Login</strong>. Your license automatically opens{' '}
+                      <strong>cPanel (2083)</strong> for Solo plans or <strong>WHM (2087)</strong>{' '}
+                      for multi-account plans!
+                    </p>
+                  </SpotlightCard>
+                </div>
+              </AnimatedContent>
+            )}
+
+            {/* =================================================================
+                SURFACE 1: GARVIX cPANEL (DASHBOARD + ALL cPANEL TOOLS)
                ================================================================= */}
             {activeSurface === 'cpanel' && activeSidebarItem === 'dashboard' && (
               <div className="space-y-8">
+                {/* Active License Context Strip inside cPanel */}
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-indigo-100 bg-white px-4 py-3 text-xs shadow-2xs">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="success">cPANEL PORT 2083 ACTIVE</Badge>
+                    <span className="font-semibold text-slate-700">
+                      Account: <strong className="font-mono">{activeCpanelUser}</strong> (
+                      <strong className="font-mono">{activeCpanelDomain}</strong>)
+                    </span>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-slate-600">
+                      License: <strong className="text-indigo-700">{activeCustomerLicense.planName}</strong>
+                    </span>
+                  </div>
+                  {canAccessWhm && (
+                    <Button size="sm" variant="outline" onClick={() => setActiveSurface('whm')}>
+                      ← Return to WHM Server Admin (Port 2087)
+                    </Button>
+                  )}
+                </div>
+
                 {/* SECTION B: Welcome Section with BlurText, GradientText & Floating Cloud SVG */}
                 <AnimatedContent delayMs={0}>
                   <NebulixWelcomeHero
@@ -1059,6 +1776,9 @@ export function CustomerPanelApp(): React.ReactElement {
                 section={activeWhmSection}
                 onSelectSection={(sec) => setActiveWhmSection(sec)}
                 accounts={whmAccounts}
+                maxAccountsLimit={activeCustomerLicense.maxAccounts}
+                licensePlanName={activeCustomerLicense.planName}
+                serverIp={activeCustomerLicense.serverIp}
                 services={whmServices}
                 onCreateAccount={handleWhmCreateAccount}
                 onToggleSuspendAccount={handleWhmToggleSuspend}
@@ -1070,140 +1790,153 @@ export function CustomerPanelApp(): React.ReactElement {
             )}
 
             {/* =================================================================
-                SURFACE 3: BUY cPANEL OR WHM + cPANEL LICENSE STORE
+                SURFACE 3: GARVIX MASTER ADMIN PANEL (OWNER / SUPER ADMIN)
                ================================================================= */}
-            {activeSurface === 'store' && (
-              <AnimatedContent className="space-y-6">
-                <AuroraBackground className="p-6 sm:p-8">
-                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <Badge variant="orange">BUY cPANEL OR WHM + cPANEL LICENSE</Badge>
-                      <h2 className="mt-2 font-display text-2xl font-extrabold text-slate-900 sm:text-3xl">
-                        <BlurText text="Choose Only cPanel (1 Account) or WHM + cPanel License" />
-                      </h2>
-                      <p className="mt-1 text-xs text-slate-600 max-w-2xl">
-                        Install Garvix on your own VPS or Dedicated Server. Pay via Razorpay (UPI
-                        QR, Credit/Debit Card, NetBanking) and get your instant license key + 1-line
-                        SSH install command.
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-indigo-100 bg-white px-5 py-3.5 text-xs shadow-sm">
-                      <div className="font-semibold text-slate-500">Your Issued License Key:</div>
-                      <div className="mt-1 font-mono text-sm font-extrabold text-indigo-700">
-                        <DecryptedText text={issuedStoreKey} />
-                      </div>
-                    </div>
-                  </div>
-                </AuroraBackground>
-
-                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                  {STORE_PLANS.map((plan) => (
-                    <TiltedCard key={plan.code} maxTiltDeg={4}>
-                      <StarBorder color={plan.popular ? '#6366F1' : '#C7D2FE'} className="h-full">
-                        <div className="flex h-full flex-col justify-between rounded-[15px] bg-white p-5">
-                          <div>
-                            <Badge variant={plan.popular ? 'orange' : 'secondary'}>
-                              {plan.badge}
-                            </Badge>
-                            <h3 className="mt-3 font-display text-lg font-extrabold text-slate-900">
-                              {plan.name}
-                            </h3>
-                            <div className="mt-2 font-display text-3xl font-extrabold text-slate-900">
-                              ₹{plan.priceInr}
-                              <span className="text-xs font-medium text-slate-500">
-                                {' '}
-                                / month (+18% GST)
-                              </span>
-                            </div>
-                            <p className="mt-2 text-xs font-semibold text-indigo-700">
-                              {plan.accounts}
-                            </p>
-                          </div>
-
-                          <Button
-                            variant={plan.popular ? 'nebulix' : 'outline'}
-                            className="mt-6 w-full"
-                            onClick={() => setCheckoutPlan(plan)}
-                          >
-                            <CreditCard className="h-4 w-4" />
-                            Buy License via Razorpay
-                          </Button>
-                        </div>
-                      </StarBorder>
-                    </TiltedCard>
-                  ))}
-                </div>
-              </AnimatedContent>
+            {activeSurface === 'admin' && (
+              <NebulixMasterAdmin
+                plans={licensePlans}
+                onSavePlans={handleSavePlans}
+                onResetDefaultPlans={handleResetDefaultPlans}
+                customerLicenses={customerLicenses}
+                onSaveCustomerLicenses={handleSaveCustomerLicenses}
+                onOpenPublicStore={() => setActiveSurface('store')}
+                onImpersonateLicense={(lic) => loginWithCustomerLicense(lic)}
+                onShowToast={showToast}
+              />
             )}
 
             {/* =================================================================
-                SURFACE 4: cPANEL vs WHM LOGIN PORTAL (NEBULIX LIGHT THEME)
+                SURFACE 4: UNIFIED LOGIN PORTAL (PLAN-BASED REDIRECT TO WHM OR cPANEL)
                ================================================================= */}
             {activeSurface === 'login' && (
-              <AnimatedContent>
-                <AuroraBackground className="mx-auto max-w-xl p-6 sm:p-8">
-                  <div className="flex gap-2">
+              <AnimatedContent className="space-y-6">
+                <AuroraBackground className="mx-auto max-w-2xl p-6 sm:p-8">
+                  <div className="flex flex-wrap gap-2">
                     <Button
                       variant={loginMode === 'CUSTOMER' ? 'nebulix' : 'outline'}
                       size="sm"
                       onClick={() => setLoginMode('CUSTOMER')}
                     >
                       <UserCheck className="h-4 w-4" />
-                      cPanel Login (Port 2083)
+                      Customer License Login (Auto-Opens WHM or cPanel)
                     </Button>
                     <Button
-                      variant={loginMode === 'ADMIN' ? 'blue' : 'outline'}
+                      variant={loginMode === 'MASTER_ADMIN' ? 'blue' : 'outline'}
                       size="sm"
-                      onClick={() => setLoginMode('ADMIN')}
+                      onClick={() => setLoginMode('MASTER_ADMIN')}
                     >
-                      <KeyRound className="h-4 w-4" />
-                      WHM Login (Port 2087)
+                      <ShieldCheck className="h-4 w-4" />
+                      Garvix Master Admin Login (Owner)
                     </Button>
                   </div>
 
                   <div className="mt-5">
                     <h2 className="font-display text-xl font-extrabold text-slate-900">
                       {loginMode === 'CUSTOMER'
-                        ? 'GARVIX cPanel Login'
-                        : 'GARVIX WHM (WebHost Manager) Login'}
+                        ? 'Sign In to Your Garvix Licensed Server Panel'
+                        : 'Garvix Master Admin Login (Plans, Pricing & Account Limits)'}
                     </h2>
                     <p className="mt-1 text-xs text-slate-600">
                       {loginMode === 'CUSTOMER'
-                        ? 'Sign in to your cPanel account to manage domains, emails, databases, files, and SSL.'
-                        : 'Sign in to WHM to create and manage multiple cPanel accounts on your server.'}
+                        ? 'Enter your registered email & password. If your plan is cPanel Solo (1 Account), you will go directly to cPanel (2083). If your plan includes WHM, you will go to WHM (2087).'
+                        : 'Sign in as the Garvix Owner to update plan pricing (₹), max cPanel account quotas, and customer server IPs.'}
                     </p>
                   </div>
 
-                  <div className="mt-5 space-y-4">
+                  <form onSubmit={handleLoginFormSubmit} className="mt-5 space-y-4">
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-700">
-                        {loginMode === 'CUSTOMER' ? 'cPanel Username or Email' : 'WHM Root / Reseller Username'}
+                        {loginMode === 'CUSTOMER'
+                          ? 'Customer Email / Username'
+                          : 'Master Admin Email'}
                       </label>
                       <Input
-                        defaultValue={
-                          loginMode === 'CUSTOMER' ? 'garvixprod' : 'root'
+                        required
+                        value={
+                          loginMode === 'CUSTOMER'
+                            ? loginEmailInput
+                            : 'owner@garvix.io'
                         }
+                        onChange={(e) => setLoginEmailInput(e.target.value)}
                       />
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-700">Password</label>
-                      <Input type="password" defaultValue="••••••••••••" />
+                      <Input
+                        required
+                        type="password"
+                        value={loginPasswordInput}
+                        onChange={(e) => setLoginPasswordInput(e.target.value)}
+                      />
                     </div>
-                    <Button
-                      variant="nebulix"
-                      className="w-full"
-                      onClick={() => {
-                        setActiveSurface(loginMode === 'CUSTOMER' ? 'cpanel' : 'whm');
-                        showToast(
-                          `Signed in to ${
-                            loginMode === 'CUSTOMER' ? 'GARVIX cPanel' : 'GARVIX WHM'
-                          }.`
-                        );
-                      }}
-                    >
+                    <Button type="submit" variant="nebulix" className="w-full">
                       <Lock className="h-4 w-4" />
-                      Sign In to {loginMode === 'CUSTOMER' ? 'cPanel' : 'WHM'}
+                      {loginMode === 'CUSTOMER'
+                        ? 'Sign In & Open Licensed Panel'
+                        : 'Sign In to Master Admin Panel'}
                     </Button>
+                  </form>
+
+                  {/* 1-Click Quick Demo Login Buttons for Instant Testing */}
+                  <div className="mt-6 border-t border-indigo-100 pt-5 space-y-3">
+                    <div className="text-xs font-extrabold uppercase tracking-wider text-indigo-700">
+                      1-Click Instant Login (Test Each Plan Mode Immediately):
+                    </div>
+                    <div className="grid gap-2.5 sm:grid-cols-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const whmLic =
+                            customerLicenses.find((l) => l.panelMode === 'WHM_AND_CPANEL') ||
+                            DEFAULT_CUSTOMER_LICENSES[0]!;
+                          loginWithCustomerLicense(whmLic);
+                        }}
+                        className="rounded-xl border border-indigo-200 bg-white p-3 text-left text-xs transition hover:border-indigo-500 hover:bg-indigo-50/60"
+                      >
+                        <div className="font-extrabold text-indigo-900">
+                          1. WHM + cPanel Customer
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-slate-600">
+                          Opens <strong>WHM (2087)</strong> + Create cPanel Accounts
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const soloLic =
+                            customerLicenses.find((l) => l.panelMode === 'ONLY_CPANEL') ||
+                            DEFAULT_CUSTOMER_LICENSES[1]!;
+                          loginWithCustomerLicense(soloLic);
+                        }}
+                        className="rounded-xl border border-indigo-200 bg-white p-3 text-left text-xs transition hover:border-indigo-500 hover:bg-indigo-50/60"
+                      >
+                        <div className="font-extrabold text-indigo-900">
+                          2. cPanel Solo Customer
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-slate-600">
+                          Opens <strong>cPanel Only (2083)</strong> (1 Account · No WHM)
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveSurface('admin');
+                          showToast(
+                            'Opened Garvix Master Admin Panel — Control all Plans, Pricing & Account Limits!'
+                          );
+                        }}
+                        className="rounded-xl border border-violet-200 bg-violet-50/70 p-3 text-left text-xs transition hover:border-violet-500 hover:bg-violet-100/70"
+                      >
+                        <div className="font-extrabold text-violet-950">
+                          3. Master Admin (Owner)
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-violet-800">
+                          Edit Plans, Pricing (₹) &amp; Max Accounts
+                        </div>
+                      </button>
+                    </div>
                   </div>
                 </AuroraBackground>
               </AnimatedContent>
@@ -1252,7 +1985,7 @@ export function CustomerPanelApp(): React.ReactElement {
               required
               value={newDnsValue}
               onChange={(e) => setNewDnsValue(e.target.value)}
-              placeholder="72.61.236.175"
+              placeholder="200.234.39.100"
             />
           </div>
           <div className="flex justify-end gap-2">
@@ -1504,40 +2237,78 @@ export function CustomerPanelApp(): React.ReactElement {
         </form>
       </DialogModal>
 
-      {/* 5. Razorpay Checkout Modal */}
+      {/* 5. Razorpay & UPI License Checkout Modal */}
       <DialogModal
         open={checkoutPlan !== null}
         onClose={() => setCheckoutPlan(null)}
-        title={checkoutPlan ? `Razorpay Checkout — ${checkoutPlan.name}` : 'Razorpay Checkout'}
-        description="Supports UPI QR, Credit/Debit Cards (Visa/Mastercard/RuPay), and NetBanking."
+        title={
+          checkoutPlan
+            ? `Buy ${checkoutPlan.name} (₹${checkoutPlan.monthlyInr}/mo)`
+            : 'Buy Garvix Software License'
+        }
+        description="Create your account credentials, bind your server IPv4, and receive your Ed25519 license key + 1-line SSH install command."
       >
         <form onSubmit={handleRazorpayCheckoutSubmit} className="space-y-4">
+          {checkoutPlan && (
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-3 text-xs">
+              <div className="font-bold text-indigo-950">
+                Selected Plan: {checkoutPlan.name} — ₹{checkoutPlan.monthlyInr}/month
+              </div>
+              <div className="mt-0.5 text-indigo-700">
+                {checkoutPlan.maxAccountsLabel} · Login Opens:{' '}
+                <strong>
+                  {checkoutPlan.panelMode === 'ONLY_CPANEL'
+                    ? 'cPanel Dashboard Directly (Port 2083)'
+                    : 'WHM Server Admin (Port 2087) + cPanel'}
+                </strong>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-700">Customer Email</label>
+            <label className="text-xs font-semibold text-slate-700">
+              Your Login Email / Username
+            </label>
             <Input
               required
               type="email"
               value={checkoutEmail}
               onChange={(e) => setCheckoutEmail(e.target.value)}
+              placeholder="you@yourcompany.in"
             />
           </div>
+
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-700">
-              Server IPv4 for Ed25519 License Binding
+              Create Panel Login Password
+            </label>
+            <Input
+              required
+              type="text"
+              value={checkoutPassword}
+              onChange={(e) => setCheckoutPassword(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700">
+              Your Linux Server IPv4 Address (For Ed25519 License Binding)
             </label>
             <Input
               required
               value={checkoutIp}
               onChange={(e) => setCheckoutIp(e.target.value)}
+              placeholder="200.234.39.100"
             />
           </div>
-          <div className="flex justify-end gap-2">
+
+          <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setCheckoutPlan(null)}>
               Cancel
             </Button>
             <Button type="submit" variant="nebulix">
               <CreditCard className="h-4 w-4" />
-              Complete Razorpay Verification &amp; Issue Key
+              Pay via Razorpay / UPI &amp; Activate License
             </Button>
           </div>
         </form>

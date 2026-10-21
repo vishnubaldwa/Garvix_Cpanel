@@ -10,6 +10,7 @@ export { NebulixQuickActions } from './components/dashboard/NebulixQuickActions.
 export { NebulixModulePages } from './components/dashboard/NebulixModulePages.js';
 export { NebulixFileManager } from './components/dashboard/NebulixFileManager.js';
 export { NebulixWhmSidebar, NebulixWhmWorkspace } from './components/dashboard/NebulixWhmWorkspace.js';
+export { NebulixMasterAdmin } from './components/dashboard/NebulixMasterAdmin.js';
 
 
 /**

@@ -88,6 +88,9 @@ export interface NebulixWhmSidebarProps {
   activeSection: NebulixWhmSectionId;
   onSelectSection: (section: NebulixWhmSectionId) => void;
   totalAccounts: number;
+  maxAccountsLimit?: number;
+  licensePlanName?: string;
+  serverIp?: string;
   mobileOpen: boolean;
   onCloseMobile: () => void;
   onSwitchToCpanel: () => void;
@@ -97,10 +100,14 @@ export const NebulixWhmSidebar: React.FC<NebulixWhmSidebarProps> = ({
   activeSection,
   onSelectSection,
   totalAccounts,
+  maxAccountsLimit = 30,
+  licensePlanName = 'WHM Pro',
+  serverIp = '200.234.39.100',
   mobileOpen,
   onCloseMobile,
   onSwitchToCpanel,
 }) => {
+  const limitLabel = maxAccountsLimit === 0 ? 'Unlimited' : String(maxAccountsLimit);
   const sidebarContent = (
     <div className="flex h-full flex-col justify-between bg-white/95 px-4 py-6 backdrop-blur-xl">
       <div>
@@ -138,17 +145,17 @@ export const NebulixWhmSidebar: React.FC<NebulixWhmSidebarProps> = ({
         <div className="mb-5 rounded-2xl border border-indigo-100 bg-gradient-to-r from-[#F5F3FF] via-[#EEF2FF] to-[#EFF6FF] p-3">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700">
-              Licensed WHM Server
+              {licensePlanName}
             </span>
             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Ed25519 Active
             </span>
           </div>
           <div className="mt-1 truncate font-mono text-xs font-bold text-slate-900">
-            whm.garvixcloud.in (103.148.204.18)
+            whm.garvixcloud.in ({serverIp})
           </div>
           <div className="mt-0.5 text-[11px] text-slate-500">
-            {totalAccounts} / 30 Licensed cPanel Accounts Used
+            {totalAccounts} / {limitLabel} Licensed cPanel Accounts Used
           </div>
         </div>
 
@@ -266,6 +273,9 @@ export interface NebulixWhmWorkspaceProps {
   section: NebulixWhmSectionId;
   onSelectSection: (section: NebulixWhmSectionId) => void;
   accounts: WhmCpanelAccountItem[];
+  maxAccountsLimit?: number;
+  licensePlanName?: string;
+  serverIp?: string;
   services: WhmServiceDaemonItem[];
   onCreateAccount: (payload: {
     domain: string;
@@ -283,6 +293,9 @@ export const NebulixWhmWorkspace: React.FC<NebulixWhmWorkspaceProps> = ({
   section,
   onSelectSection,
   accounts,
+  maxAccountsLimit = 30,
+  licensePlanName = 'WHM Pro License',
+  serverIp = '200.234.39.100',
   services,
   onCreateAccount,
   onToggleSuspendAccount,
@@ -291,6 +304,9 @@ export const NebulixWhmWorkspace: React.FC<NebulixWhmWorkspaceProps> = ({
   onRestartService,
   onShowToast,
 }) => {
+  const limitLabel = maxAccountsLimit === 0 ? 'Unlimited' : String(maxAccountsLimit);
+  const isAtAccountLimit = maxAccountsLimit > 0 && accounts.length >= maxAccountsLimit;
+
   // Local form states for Create cPanel Account
   const [newDomain, setNewDomain] = React.useState('');
   const [newUsername, setNewUsername] = React.useState('');
@@ -358,7 +374,7 @@ export const NebulixWhmWorkspace: React.FC<NebulixWhmWorkspaceProps> = ({
   ]);
   const [whitelistIpInput, setWhitelistIpInput] = React.useState<string>('');
   const [whitelistedIps, setWhitelistedIps] = React.useState<string[]>([
-    '103.148.204.18 (Server Primary IP)',
+    `${serverIp} (Server Primary IP)`,
     '122.161.48.90 (Admin Office Static IP)',
   ]);
   const [serverScanRunning, setServerScanRunning] = React.useState<boolean>(false);
@@ -381,6 +397,12 @@ export const NebulixWhmWorkspace: React.FC<NebulixWhmWorkspaceProps> = ({
   const handleAccountSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDomain.trim() || !newUsername.trim()) return;
+    if (isAtAccountLimit) {
+      onShowToast(
+        `License limit reached (${accounts.length} / ${limitLabel} cPanel accounts on ${licensePlanName}). Upgrade your plan or increase account limit in Master Admin.`
+      );
+      return;
+    }
     onCreateAccount({
       domain: newDomain.trim().toLowerCase(),
       username: newUsername.trim().toLowerCase().replace(/[^a-z0-9]/g, ''),
@@ -420,9 +442,9 @@ export const NebulixWhmWorkspace: React.FC<NebulixWhmWorkspaceProps> = ({
     } else if (lower.includes('garvix-license')) {
       output = [
         'Garvix Licensing Engine v2.4 (Ed25519 Signature Verified)',
-        '  License Tier   : WHM Pro Software License (Up to 30 cPanel Accounts)',
-        '  Bound Server IP: 103.148.204.18 (whm.garvixcloud.in)',
-        `  Active Accounts: ${accounts.length} / 30 used`,
+        `  License Tier   : ${licensePlanName} (Max ${limitLabel} cPanel Accounts)`,
+        `  Bound Server IP: ${serverIp} (whm.garvixcloud.in)`,
+        `  Active Accounts: ${accounts.length} / ${limitLabel} used`,
         '  Offline Grace  : 72 Hours Valid · Next Heartbeat in 55m',
       ];
     } else if (lower.startsWith('systemctl')) {
@@ -574,7 +596,7 @@ export const NebulixWhmWorkspace: React.FC<NebulixWhmWorkspaceProps> = ({
               <Users className="h-5 w-5 text-indigo-600" />
             </div>
             <div className="mt-2 font-display text-3xl font-extrabold text-slate-900">
-              <CountUp to={accounts.length} suffix=" / 30" />
+              {accounts.length} / {limitLabel}
             </div>
             <p className="mt-1 text-xs font-semibold text-emerald-700">
               {activeCount} Active · {suspendedCount} Suspended
@@ -588,11 +610,11 @@ export const NebulixWhmWorkspace: React.FC<NebulixWhmWorkspaceProps> = ({
               </span>
               <ShieldCheck className="h-5 w-5 text-violet-600" />
             </div>
-            <div className="mt-2 font-display text-2xl font-extrabold text-slate-900">
-              WHM Pro
+            <div className="mt-2 font-display text-xl font-extrabold text-slate-900">
+              {licensePlanName}
             </div>
             <p className="mt-1 text-xs font-semibold text-indigo-700">
-              Ed25519 Signed · IP 103.148.204.18
+              Ed25519 Signed · IP {serverIp}
             </p>
           </SpotlightCard>
 
@@ -884,6 +906,23 @@ export const NebulixWhmWorkspace: React.FC<NebulixWhmWorkspaceProps> = ({
           onSubmit={handleAccountSubmit}
           className="mx-auto max-w-2xl rounded-2xl border border-indigo-100/90 bg-white p-6 shadow-[0_10px_30px_-12px_rgba(99,102,241,0.12)] space-y-5"
         >
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-100 bg-indigo-50/70 px-4 py-3 text-xs">
+            <span className="font-bold text-indigo-950">
+              Active License Plan: <span className="text-indigo-700">{licensePlanName}</span>
+            </span>
+            <Badge variant={isAtAccountLimit ? 'destructive' : 'success'}>
+              {accounts.length} / {limitLabel} cPanel Accounts Used
+            </Badge>
+          </div>
+
+          {isAtAccountLimit && (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs font-semibold text-rose-800">
+              Your license plan ({licensePlanName}) allows a maximum of {limitLabel} cPanel accounts.
+              Please upgrade your license plan or increase the account limit in the Garvix Master
+              Admin Panel.
+            </div>
+          )}
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-700">Primary Domain Name</label>
@@ -970,7 +1009,7 @@ export const NebulixWhmWorkspace: React.FC<NebulixWhmWorkspaceProps> = ({
             >
               Cancel
             </Button>
-            <Button type="submit" variant="nebulix">
+            <Button type="submit" variant="nebulix" disabled={isAtAccountLimit}>
               <UserPlus className="h-4 w-4" /> Provision cPanel Account Now
             </Button>
           </div>

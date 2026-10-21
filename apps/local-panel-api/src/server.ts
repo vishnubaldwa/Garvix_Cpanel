@@ -610,6 +610,10 @@ export function createLocalPanelHttpServer(
           pathname === '/index.html' ||
           pathname === '/whm' ||
           pathname === '/whm/' ||
+          pathname === '/cpanel' ||
+          pathname === '/cpanel/' ||
+          pathname === '/admin' ||
+          pathname === '/admin/' ||
           pathname === '/store' ||
           pathname === '/store/' ||
           pathname === '/portal' ||

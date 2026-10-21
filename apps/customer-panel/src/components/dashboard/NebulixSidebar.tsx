@@ -69,6 +69,7 @@ export const NebulixSidebar: React.FC<NebulixSidebarProps> = ({
   onSelectItem,
   activeCpanelDomain = 'garvixcloud.in',
   activeCpanelUser = 'garvixprod',
+  onSwitchToWhm,
   mobileOpen,
   onCloseMobile,
 }) => {
@@ -187,7 +188,18 @@ export const NebulixSidebar: React.FC<NebulixSidebarProps> = ({
       </div>
 
       {/* Bottom License Status Card */}
-      <div className="mt-6 space-y-3">
+      <div className="mt-6 space-y-2.5">
+        {onSwitchToWhm && (
+          <button
+            type="button"
+            onClick={onSwitchToWhm}
+            className="flex w-full items-center justify-between rounded-2xl border border-indigo-200 bg-indigo-50/80 px-3.5 py-2.5 text-xs font-bold text-indigo-800 transition-colors hover:bg-indigo-100"
+          >
+            <span>← Return to WHM (2087)</span>
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        )}
+
         <div className="rounded-2xl border border-indigo-100/90 bg-gradient-to-br from-violet-50/90 via-indigo-50/60 to-blue-50/90 p-3.5 shadow-sm">
           <div className="flex items-center gap-2 text-xs font-bold text-indigo-950">
             <Sparkles className="h-4 w-4 text-indigo-600" />
