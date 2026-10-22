@@ -165,40 +165,24 @@ export const DEFAULT_GARVIX_LICENSE_PLANS: GarvixLicensePlanConfig[] = [
   },
 ];
 
-export const DEFAULT_CUSTOMER_LICENSES: IssuedCustomerLicenseRecord[] = [
-  {
-    id: 'lic-pro-default',
-    customerEmail: 'admin@garvixcloud.in',
-    password: 'Admin@12345',
-    planCode: 'WHM_PRO',
-    planName: 'Garvix WHM Pro',
-    panelMode: 'WHM_AND_CPANEL',
-    maxAccounts: 30,
-    billingCycle: 'YEARLY',
-    serverIp: '200.234.39.100',
-    hostname: 'srv2075790.hstgr.cloud',
-    licenseKey: 'GVX-WHM_PRO-94CF-2026-ED25519',
-    status: 'ACTIVE',
-    createdAt: '2026-10-20',
-    expiresAt: '2027-10-20',
-  },
-  {
-    id: 'lic-solo-default',
-    customerEmail: 'solo@garvixcloud.in',
-    password: 'Admin@12345',
-    planCode: 'CPANEL_SOLO',
-    planName: 'Garvix cPanel Solo',
-    panelMode: 'ONLY_CPANEL',
-    maxAccounts: 1,
-    billingCycle: 'MONTHLY',
-    serverIp: '200.234.39.100',
-    hostname: 'solo.garvixcloud.in',
-    licenseKey: 'GVX-CPANEL_SOLO-31A8-2026-ED25519',
-    status: 'ACTIVE',
-    createdAt: '2026-10-20',
-    expiresAt: '2026-11-20',
-  },
-];
+export const DEFAULT_CUSTOMER_LICENSES: IssuedCustomerLicenseRecord[] = [];
+
+const OWNER_MASTER_LICENSE_FALLBACK: IssuedCustomerLicenseRecord = {
+  id: 'lic-master-owner',
+  customerEmail: 'admin@garvix.io',
+  password: '',
+  planCode: 'WHM_PREMIER',
+  planName: 'Master Admin (Unlimited)',
+  panelMode: 'WHM_AND_CPANEL',
+  maxAccounts: 0,
+  billingCycle: 'YEARLY',
+  serverIp: '200.234.39.100',
+  hostname: 'panel.garvix.in',
+  licenseKey: 'GVX-MASTER-OWNER-ED25519',
+  status: 'ACTIVE',
+  createdAt: '2026-10-22',
+  expiresAt: '2099-12-31',
+};
 
 export const DEFAULT_RAZORPAY_CONFIG: RazorpayGatewayConfig = {
   enabled: true,
@@ -413,78 +397,35 @@ interface HostedDbItem {
   sizeMb: number;
 }
 
-const INITIAL_DNS_RECORDS: DnsRecordItem[] = [
-  { id: 'dns-1', type: 'A', name: '@', value: '200.234.39.100', ttl: 3600 },
-  { id: 'dns-2', type: 'A', name: 'mail', value: '200.234.39.100', ttl: 3600 },
-  { id: 'dns-3', type: 'MX', name: '@', value: '10 mail.garvixcloud.in.', ttl: 3600 },
-  {
-    id: 'dns-4',
-    type: 'TXT',
-    name: '@',
-    value: 'v=spf1 ip4:200.234.39.100 -all',
-    ttl: 3600,
-  },
-  {
-    id: 'dns-5',
-    type: 'TXT',
-    name: 'default._domainkey',
-    value: 'v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A...',
-    ttl: 3600,
-  },
-];
+const INITIAL_DNS_RECORDS: DnsRecordItem[] = [];
 
-const INITIAL_DATABASES: HostedDbItem[] = [
-  {
-    id: 'db-1',
-    name: 'garvixprod_app',
-    engine: 'POSTGRESQL_16',
-    dbUser: 'garvixprod_pguser',
-    sizeMb: 148,
-  },
-  {
-    id: 'db-2',
-    name: 'garvixprod_wp',
-    engine: 'MARIADB_10_11',
-    dbUser: 'garvixprod_myuser',
-    sizeMb: 84,
-  },
-];
+const INITIAL_DATABASES: HostedDbItem[] = [];
 
-const INITIAL_WHM_ACCOUNTS: WhmCpanelAccountItem[] = [
-  {
-    id: 'acct-1',
-    domain: 'garvixcloud.in',
-    username: 'garvixprod',
-    email: 'vishnu@garvixcloud.in',
-    diskUsedGb: 14.2,
-    emailAccounts: 18,
-    databases: 2,
-    status: 'ACTIVE',
-    createdAt: '2026-01-12',
-  },
-  {
-    id: 'acct-2',
-    domain: 'acmecorp.in',
-    username: 'acmecorp',
-    email: 'admin@acmecorp.in',
-    diskUsedGb: 6.4,
-    emailAccounts: 8,
-    databases: 3,
-    status: 'ACTIVE',
-    createdAt: '2026-04-08',
-  },
-  {
-    id: 'acct-3',
-    domain: 'shopkart.co.in',
-    username: 'shopkart',
-    email: 'tech@shopkart.co.in',
-    diskUsedGb: 2.1,
-    emailAccounts: 4,
-    databases: 1,
-    status: 'ACTIVE',
-    createdAt: '2026-07-19',
-  },
-];
+const INITIAL_WHM_ACCOUNTS: WhmCpanelAccountItem[] = [];
+
+const DEMO_LICENSE_IDS_SET = new Set([
+  'lic-demo-solo',
+  'lic-demo-pro',
+  'lic-demo-premier',
+  'lic-pro-default',
+  'lic-solo-default',
+]);
+const DEMO_LICENSE_EMAILS_SET = new Set([
+  'solo@client.in',
+  'pro@client.in',
+  'unlimited@client.in',
+  'admin@garvixcloud.in',
+  'solo@garvixcloud.in',
+]);
+
+const filterOutDemoLicenses = (
+  list: IssuedCustomerLicenseRecord[]
+): IssuedCustomerLicenseRecord[] =>
+  list.filter(
+    (l) =>
+      !DEMO_LICENSE_IDS_SET.has(String(l?.id ?? '')) &&
+      !DEMO_LICENSE_EMAILS_SET.has(String(l?.customerEmail ?? '').toLowerCase())
+  );
 
 const INITIAL_WHM_SERVICES: WhmServiceDaemonItem[] = [
   {
@@ -495,7 +436,7 @@ const INITIAL_WHM_SERVICES: WhmServiceDaemonItem[] = [
     pid: 1142,
     memoryMb: 128,
     status: 'RUNNING',
-    lastRestarted: 'Uptime 42d 11h',
+    lastRestarted: 'Active (Running)',
   },
   {
     id: 'svc-php',
@@ -505,7 +446,7 @@ const INITIAL_WHM_SERVICES: WhmServiceDaemonItem[] = [
     pid: 1289,
     memoryMb: 340,
     status: 'RUNNING',
-    lastRestarted: 'Uptime 42d 11h',
+    lastRestarted: 'Active (Running)',
   },
   {
     id: 'svc-pg',
@@ -515,7 +456,7 @@ const INITIAL_WHM_SERVICES: WhmServiceDaemonItem[] = [
     pid: 1410,
     memoryMb: 612,
     status: 'RUNNING',
-    lastRestarted: 'Uptime 42d 11h',
+    lastRestarted: 'Active (Running)',
   },
   {
     id: 'svc-mariadb',
@@ -525,7 +466,7 @@ const INITIAL_WHM_SERVICES: WhmServiceDaemonItem[] = [
     pid: 1504,
     memoryMb: 520,
     status: 'RUNNING',
-    lastRestarted: 'Uptime 42d 11h',
+    lastRestarted: 'Active (Running)',
   },
   {
     id: 'svc-mail',
@@ -535,7 +476,7 @@ const INITIAL_WHM_SERVICES: WhmServiceDaemonItem[] = [
     pid: 1622,
     memoryMb: 280,
     status: 'RUNNING',
-    lastRestarted: 'Uptime 42d 11h',
+    lastRestarted: 'Active (Running)',
   },
   {
     id: 'svc-dns',
@@ -545,7 +486,7 @@ const INITIAL_WHM_SERVICES: WhmServiceDaemonItem[] = [
     pid: 1708,
     memoryMb: 94,
     status: 'RUNNING',
-    lastRestarted: 'Uptime 42d 11h',
+    lastRestarted: 'Active (Running)',
   },
 ];
 
@@ -581,7 +522,11 @@ export function CustomerPanelApp(): React.ReactElement {
           const raw = window.localStorage.getItem(LICENSES_STORAGE_KEY);
           if (raw) {
             const parsed = JSON.parse(raw) as IssuedCustomerLicenseRecord[];
-            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            if (Array.isArray(parsed)) {
+              const cleaned = filterOutDemoLicenses(parsed);
+              window.localStorage.setItem(LICENSES_STORAGE_KEY, JSON.stringify(cleaned));
+              return cleaned;
+            }
           }
         } catch {
           // ignore
@@ -684,7 +629,9 @@ export function CustomerPanelApp(): React.ReactElement {
   }, [authSession, activeSurface]);
 
   const activeCustomerLicense: IssuedCustomerLicenseRecord =
-    authSession?.role === 'CUSTOMER' ? authSession.license : DEFAULT_CUSTOMER_LICENSES[0]!;
+    authSession?.role === 'CUSTOMER'
+      ? authSession.license
+      : customerLicenses[0] ?? OWNER_MASTER_LICENSE_FALLBACK;
 
   const syncPortalStateToServer = (payload: Record<string, unknown>, explicitToken?: string) => {
     if (typeof window === 'undefined') return;
@@ -724,9 +671,56 @@ export function CustomerPanelApp(): React.ReactElement {
           setLicensePlans(normalized);
           window.localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify(normalized));
         }
-        if (Array.isArray(d.customerLicenses) && d.customerLicenses.length > 0) {
-          setCustomerLicenses(d.customerLicenses as IssuedCustomerLicenseRecord[]);
-          window.localStorage.setItem(LICENSES_STORAGE_KEY, JSON.stringify(d.customerLicenses));
+        if (Array.isArray(d.customerLicenses)) {
+          const cleaned = filterOutDemoLicenses(d.customerLicenses as IssuedCustomerLicenseRecord[]);
+          setCustomerLicenses(cleaned);
+          window.localStorage.setItem(LICENSES_STORAGE_KEY, JSON.stringify(cleaned));
+        }
+        if (Array.isArray(d.hostedWebsites)) {
+          const realWebsites = (
+            d.hostedWebsites as Array<{
+              id: string;
+              domain: string;
+              username: string;
+              createdAt: string;
+            }>
+          ).filter((w) => w.domain && w.domain !== 'garvixcloud.in');
+          setWhmAccounts(
+            realWebsites.map((w) => ({
+              id: w.id || `acct-${w.domain}`,
+              domain: w.domain,
+              username: w.username || w.domain.split('.')[0] || 'web',
+              email: `admin@${w.domain}`,
+              diskUsedGb: 0.1,
+              emailAccounts: 0,
+              databases: 0,
+              status: 'ACTIVE',
+              createdAt: w.createdAt || new Date().toISOString().slice(0, 10),
+            }))
+          );
+          if (realWebsites[0]?.domain) {
+            setActiveCpanelDomain(realWebsites[0].domain);
+            setActiveCpanelUser(
+              realWebsites[0].username || realWebsites[0].domain.split('.')[0] || 'web'
+            );
+          }
+        }
+        if (Array.isArray(d.hostedDatabases)) {
+          const realDbs = d.hostedDatabases as Array<{
+            id: string;
+            dbName: string;
+            dbUser: string;
+            engine: 'POSTGRESQL_16' | 'MARIADB_10_11';
+          }>;
+          setDatabases(
+            realDbs.map((db, idx) => ({
+              id: db.id || `db-${idx}`,
+              name: db.dbName,
+              engine: db.engine || 'POSTGRESQL_16',
+              dbUser: db.dbUser,
+              sizeMb: 16,
+            }))
+          );
         }
         if (d.razorpayConfig && typeof d.razorpayConfig === 'object') {
           setRazorpayConfig((prev) => {
@@ -875,8 +869,8 @@ export function CustomerPanelApp(): React.ReactElement {
   const [activeRole] = React.useState<GarvixRole>('HOSTING_ACCOUNT_OWNER');
 
   // Active cPanel account context
-  const [activeCpanelDomain, setActiveCpanelDomain] = React.useState<string>('garvixcloud.in');
-  const [activeCpanelUser, setActiveCpanelUser] = React.useState<string>('garvixprod');
+  const [activeCpanelDomain, setActiveCpanelDomain] = React.useState<string>('garvix.in');
+  const [activeCpanelUser, setActiveCpanelUser] = React.useState<string>('garvix');
 
   // WHM multi-account & server states
   const [whmAccounts, setWhmAccounts] =
@@ -916,17 +910,12 @@ export function CustomerPanelApp(): React.ReactElement {
     showToast(`Opened ${entry.title}`);
   };
 
-  // Existing interactive states preserved
+  // Clean real-data states (Zero fake demo items)
   const [dnsRecords, setDnsRecords] = React.useState<DnsRecordItem[]>(INITIAL_DNS_RECORDS);
   const [databases, setDatabases] = React.useState<HostedDbItem[]>(INITIAL_DATABASES);
-  const [mailboxes, setMailboxes] = React.useState<EmailMailboxView[]>([
-    { address: 'vishnu@garvixcloud.in', usedMb: 640, quotaMb: 2048 },
-    { address: 'support@garvixcloud.in', usedMb: 420, quotaMb: 2048 },
-    { address: 'billing@garvixcloud.in', usedMb: 310, quotaMb: 2048 },
-    { address: 'security@garvixcloud.in', usedMb: 185, quotaMb: 1024 },
-  ]);
-  const [emailCount, setEmailCount] = React.useState<number>(18);
-  const [sslCount, setSslCount] = React.useState<number>(5);
+  const [mailboxes, setMailboxes] = React.useState<EmailMailboxView[]>([]);
+  const [emailCount, setEmailCount] = React.useState<number>(0);
+  const [sslCount, setSslCount] = React.useState<number>(0);
 
   // Modals for Quick Actions
   const [dnsModalOpen, setDnsModalOpen] = React.useState<boolean>(false);
@@ -1043,6 +1032,23 @@ export function CustomerPanelApp(): React.ReactElement {
       // fallback offline
     }
 
+    setWhmAccounts((prev) => {
+      if (prev.some((a) => a.domain === cleanDom)) return prev;
+      return [
+        {
+          id: `acct-${Date.now()}`,
+          domain: cleanDom,
+          username: activeCpanelUser,
+          email: `admin@${cleanDom}`,
+          diskUsedGb: 0.1,
+          emailAccounts: 0,
+          databases: 0,
+          status: 'ACTIVE',
+          createdAt: new Date().toISOString().slice(0, 10),
+        },
+        ...prev,
+      ];
+    });
     setActiveCpanelDomain(cleanDom);
     setNewWebsiteDomainInput('');
     refreshPublicHtmlFiles(cleanDom);
@@ -2525,12 +2531,12 @@ export function CustomerPanelApp(): React.ReactElement {
 
                 <AnimatedContent delayMs={70}>
                   <NebulixStatsGrid
-                    activeWebsitesCount={3}
-                    domainsCount={dnsRecords.length}
-                    emailAccountsCount={emailCount}
-                    storageUsedGb={14.2}
+                    activeWebsitesCount={whmAccounts.length}
+                    domainsCount={whmAccounts.length}
+                    emailAccountsCount={mailboxes.length}
+                    storageUsedGb={0}
                     storageTotalGb={50}
-                    monthlyBandwidthGb={412}
+                    monthlyBandwidthGb={0}
                     bandwidthLimitGb={2000}
                     sslCertificatesCount={sslCount}
                   />

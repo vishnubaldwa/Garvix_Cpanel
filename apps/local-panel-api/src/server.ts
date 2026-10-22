@@ -553,56 +553,7 @@ export function createLocalPanelHttpServer(
     },
   ];
 
-  const defaultPortalCustomerLicenses = [
-    {
-      id: 'lic-demo-solo',
-      customerEmail: 'solo@client.in',
-      password: 'Password@123',
-      planCode: 'CPANEL_SOLO',
-      planName: 'cPanel Solo',
-      billingCycle: 'MONTHLY',
-      panelMode: 'ONLY_CPANEL',
-      maxAccounts: 1,
-      serverIp: '200.234.39.100',
-      hostname: 'solo.garvixcloud.in',
-      licenseKey: 'GVX-CPANEL_SOLO-8841-2026-ED25519',
-      status: 'ACTIVE',
-      createdAt: '2026-04-20',
-      expiresAt: '2026-05-20',
-    },
-    {
-      id: 'lic-demo-pro',
-      customerEmail: 'pro@client.in',
-      password: 'Password@123',
-      planCode: 'WHM_PRO',
-      planName: 'WHM Pro',
-      billingCycle: 'MONTHLY',
-      panelMode: 'WHM_AND_CPANEL',
-      maxAccounts: 30,
-      serverIp: '200.234.39.100',
-      hostname: 'srv1.garvixcloud.in',
-      licenseKey: 'GVX-WHM_PRO-9920-2026-ED25519',
-      status: 'ACTIVE',
-      createdAt: '2026-04-20',
-      expiresAt: '2026-05-20',
-    },
-    {
-      id: 'lic-demo-premier',
-      customerEmail: 'unlimited@client.in',
-      password: 'Password@123',
-      planCode: 'WHM_PREMIER',
-      planName: 'WHM Premier',
-      billingCycle: 'YEARLY',
-      panelMode: 'WHM_AND_CPANEL',
-      maxAccounts: 0,
-      serverIp: '200.234.39.100',
-      hostname: 'dc1.garvixcloud.in',
-      licenseKey: 'GVX-WHM_PREMIER-7770-2026-ED25519',
-      status: 'ACTIVE',
-      createdAt: '2026-04-20',
-      expiresAt: '2027-04-20',
-    },
-  ];
+  const defaultPortalCustomerLicenses: Array<Record<string, any>> = [];
 
   let portalState: {
     licensePlans?: Array<Record<string, any>>;
@@ -1270,6 +1221,7 @@ $docRoot = __DIR__;
         );
       }
 
+      statements.push('DELETE FROM garvix_customer_licenses;');
       for (const lic of portalState.customerLicenses ?? []) {
         const id = String(lic.id ?? '').replace(/[^a-zA-Z0-9_-]/g, '');
         if (!id) continue;
@@ -1289,9 +1241,10 @@ $docRoot = __DIR__;
         );
       }
 
+      statements.push("DELETE FROM garvix_hosted_websites WHERE domain = 'garvixcloud.in';");
       for (const web of portalState.hostedWebsites ?? []) {
         const domain = sanitizeDomainName(web.domain);
-        if (!domain) continue;
+        if (!domain || domain === 'garvixcloud.in') continue;
         const username = String(web.username ?? 'web').replace(/[^a-zA-Z0-9_]/g, '');
         const docRoot = String(web.docRoot ?? '').replace(/'/g, "''");
         const vhostConfPath = String(web.vhostConfPath ?? '').replace(/'/g, "''");
@@ -1354,6 +1307,21 @@ $docRoot = __DIR__;
     } catch (_) {}
   };
 
+  const DEMO_LICENSE_IDS = new Set([
+    'lic-demo-solo',
+    'lic-demo-pro',
+    'lic-demo-premier',
+    'lic-pro-default',
+    'lic-solo-default',
+  ]);
+  const DEMO_LICENSE_EMAILS = new Set([
+    'solo@client.in',
+    'pro@client.in',
+    'unlimited@client.in',
+    'admin@garvixcloud.in',
+    'solo@garvixcloud.in',
+  ]);
+
   const applyRestoredPayload = (parsed: Record<string, any>) => {
     if (Array.isArray(parsed.apiTokensList)) {
       apiTokensList.splice(0, apiTokensList.length, ...parsed.apiTokensList);
@@ -1403,6 +1371,16 @@ $docRoot = __DIR__;
     }
     if (parsed.portalState && typeof parsed.portalState === 'object') {
       const ps = parsed.portalState;
+      const cleanedCustomerLicenses = Array.isArray(ps.customerLicenses)
+        ? ps.customerLicenses.filter(
+            (l: Record<string, any>) =>
+              !DEMO_LICENSE_IDS.has(String(l?.id ?? '')) &&
+              !DEMO_LICENSE_EMAILS.has(String(l?.customerEmail ?? '').toLowerCase())
+          )
+        : [];
+      const cleanedHostedWebsites = Array.isArray(ps.hostedWebsites)
+        ? ps.hostedWebsites.filter((w: Record<string, any>) => w?.domain !== 'garvixcloud.in')
+        : [];
       portalState = {
         ...portalState,
         ...ps,
@@ -1410,10 +1388,7 @@ $docRoot = __DIR__;
           Array.isArray(ps.licensePlans) && ps.licensePlans.length > 0
             ? ps.licensePlans
             : portalState.licensePlans,
-        customerLicenses:
-          Array.isArray(ps.customerLicenses) && ps.customerLicenses.length > 0
-            ? ps.customerLicenses
-            : portalState.customerLicenses,
+        customerLicenses: cleanedCustomerLicenses,
         razorpayConfig: ps.razorpayConfig
           ? { ...portalState.razorpayConfig!, ...ps.razorpayConfig }
           : portalState.razorpayConfig,
@@ -1421,7 +1396,7 @@ $docRoot = __DIR__;
           ? { ...portalState.adminCredentials!, ...ps.adminCredentials }
           : portalState.adminCredentials,
         jwtSecret: ps.jwtSecret || portalState.jwtSecret,
-        hostedWebsites: Array.isArray(ps.hostedWebsites) ? ps.hostedWebsites : [],
+        hostedWebsites: cleanedHostedWebsites,
         hostedDatabases: Array.isArray(ps.hostedDatabases) ? ps.hostedDatabases : [],
       };
     }
@@ -1450,24 +1425,11 @@ $docRoot = __DIR__;
     try {
       const parsed = JSON.parse(fs.readFileSync(extrasFilePath, 'utf8'));
       applyRestoredPayload(parsed);
-      if (postgresReady) {
-        syncPortalStateToPostgres();
-      }
     } catch (_) {}
-  } else if (!loadedFromPostgres && postgresReady) {
-    syncPortalStateToPostgres();
   }
 
-  // Ensure default demo domain garvixcloud.in has a real document root provisioned
-  if (!portalState.hostedWebsites || portalState.hostedWebsites.length === 0) {
-    try {
-      provisionRealLinuxVhost({
-        domain: 'garvixcloud.in',
-        username: 'garvixprod',
-        template: 'DEFAULT_LANDING',
-      });
-    } catch {}
-  }
+  // Persist cleaned state (with zero demo licenses/websites) to PostgreSQL & disk
+  saveExtras();
 
   const server = createServer(async (req, res) => {
     const requestId = `req_${randomUUID().slice(0, 8)}`;
@@ -1506,6 +1468,8 @@ $docRoot = __DIR__;
         incomingHost === 'localhost' ||
         incomingHost === '127.0.0.1' ||
         incomingHost === '200.234.39.100' ||
+        incomingHost === 'panel.garvix.in' ||
+        incomingHost.startsWith('panel.') ||
         incomingHost.includes('hstgr.cloud') ||
         incomingHost === portalState.panelSsl?.domain ||
         pathname.startsWith('/api/') ||
@@ -3881,6 +3845,8 @@ $docRoot = __DIR__;
             licensePlans: portalState.licensePlans ?? defaultPortalPlans,
             razorpayConfig: sanitizedRazorpayConfig,
             panelSsl: portalState.panelSsl ?? null,
+            hostedWebsites: portalState.hostedWebsites ?? [],
+            hostedDatabases: portalState.hostedDatabases ?? [],
             ...(isMasterAdmin
               ? {
                   customerLicenses: portalState.customerLicenses ?? defaultPortalCustomerLicenses,

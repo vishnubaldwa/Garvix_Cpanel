@@ -111,41 +111,22 @@ const SAMPLE_SQL_TABLES: Record<
   users: {
     description: 'Primary application users & Argon2id authentication credentials',
     columns: ['id', 'email', 'full_name', 'role', 'status', 'created_at'],
-    rows: [
-      ['101', 'vishnu@garvixcloud.in', 'Vishnu Baldwa', 'SUPER_ADMIN', 'ACTIVE', '2026-10-01 09:14:22'],
-      ['102', 'ops@garvixcloud.in', 'Garvix SecOps', 'ADMIN', 'ACTIVE', '2026-10-04 11:30:05'],
-      ['103', 'billing@acmecorp.in', 'Rohan Sharma', 'CUSTOMER', 'ACTIVE', '2026-10-12 16:45:10'],
-      ['104', 'founder@shopkart.co.in', 'Priya Patel', 'CUSTOMER', 'ACTIVE', '2026-10-18 19:02:49'],
-    ],
+    rows: [],
   },
   orders: {
     description: 'Customer license orders and Razorpay transaction references',
     columns: ['order_id', 'customer_email', 'plan_code', 'amount_inr', 'payment_status', 'paid_at'],
-    rows: [
-      ['ORD-9081', 'vishnu@garvixcloud.in', 'WHM-PRO-30', '₹2,199.00', 'PAID', '2026-10-15 10:12:00'],
-      ['ORD-9082', 'billing@acmecorp.in', 'WHM-ADMIN-5', '₹999.00', 'PAID', '2026-10-16 14:22:19'],
-      ['ORD-9083', 'founder@shopkart.co.in', 'CPANEL-SOLO-1', '₹399.00', 'PAID', '2026-10-19 18:05:44'],
-      ['ORD-9084', 'devops@cloudstack.in', 'WHM-PREMIER-100', '₹4,499.00', 'PAID', '2026-10-20 08:40:11'],
-    ],
+    rows: [],
   },
   subscriptions: {
     description: 'Active Ed25519 software license bindings and renewal cycles',
     columns: ['sub_id', 'domain', 'bound_ipv4', 'tier', 'expires_at', 'auto_renew'],
-    rows: [
-      ['SUB-301', 'garvixcloud.in', '72.61.236.175', 'WHM_PRO', '2026-11-20', 'ENABLED'],
-      ['SUB-302', 'acmecorp.in', '72.61.236.175', 'WHM_ADMIN', '2026-11-16', 'ENABLED'],
-      ['SUB-303', 'shopkart.co.in', '72.61.236.175', 'CPANEL_SOLO', '2026-11-19', 'ENABLED'],
-    ],
+    rows: [],
   },
   settings: {
     description: 'Application runtime configuration key-value store',
     columns: ['config_key', 'config_value', 'updated_by', 'is_encrypted'],
-    rows: [
-      ['APP_ENV', 'production', 'system', 'false'],
-      ['SMTP_HOST', 'mail.garvixcloud.in:465', 'vishnu@garvixcloud.in', 'false'],
-      ['RAZORPAY_WEBHOOK_SECRET', 'enc_aes256gcm_9f82a1b4...', 'vishnu@garvixcloud.in', 'true'],
-      ['BACKUP_RETENTION_DAYS', '30', 'ops@garvixcloud.in', 'false'],
-    ],
+    rows: [],
   },
 };
 
@@ -324,22 +305,7 @@ export const NebulixModulePages: React.FC<NebulixModulePageProps> = ({
      ============================================================================ */
   const [apiTokens, setApiTokens] = React.useState<
     Array<{ id: string; name: string; tokenPreview: string; scopes: string; created: string }>
-  >([
-    {
-      id: 'tok-1',
-      name: 'GitHub Actions CI/CD Deployer',
-      tokenPreview: 'gvx_cpanel_live_98f2a10c...e491',
-      scopes: 'Files, Git Deploy, Cache Purge',
-      created: 'Oct 15, 2026',
-    },
-    {
-      id: 'tok-2',
-      name: 'External DNS & AutoSSL Sync',
-      tokenPreview: 'gvx_cpanel_live_44b1c08d...772a',
-      scopes: 'DNS Zone Read/Write, AutoSSL',
-      created: 'Oct 18, 2026',
-    },
-  ]);
+  >([]);
   const [newTokenName, setNewTokenName] = React.useState<string>('');
   const [newTokenScopes, setNewTokenScopes] = React.useState<string>(
     'Full cPanel API (DNS, Files, Email, DB, Backups)'
@@ -350,18 +316,7 @@ export const NebulixModulePages: React.FC<NebulixModulePageProps> = ({
 
   const [cronJobs, setCronJobs] = React.useState<
     Array<{ id: string; schedule: string; command: string }>
-  >([
-    {
-      id: 'cron-1',
-      schedule: '*/5 * * * * (Every 5 Minutes)',
-      command: `/usr/bin/php /home/${activeLinuxUser}/public_html/artisan schedule:run >> /dev/null 2>&1`,
-    },
-    {
-      id: 'cron-2',
-      schedule: '0 3 * * * (Daily at 03:00 AM)',
-      command: `/usr/local/bin/garvix-backup --account ${activeLinuxUser} --verify`,
-    },
-  ]);
+  >([]);
   const [newCronSchedule, setNewCronSchedule] = React.useState<string>('*/15 * * * * (Every 15 Minutes)');
   const [newCronCommand, setNewCronCommand] = React.useState<string>(
     `/usr/bin/php /home/${activeLinuxUser}/public_html/cron.php`

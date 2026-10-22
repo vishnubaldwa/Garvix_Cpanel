@@ -327,22 +327,7 @@ export const NebulixWhmWorkspace: React.FC<NebulixWhmWorkspaceProps> = ({
   ]);
   const [whmApiTokens, setWhmApiTokens] = React.useState<
     Array<{ id: string; label: string; tokenPreview: string; permissions: string; created: string }>
-  >([
-    {
-      id: 'whm-tok-1',
-      label: 'WHMCS / Billing Provisioning Hook',
-      tokenPreview: 'gvx_whm_root_7f3a91c0...b821',
-      permissions: 'createacct, suspendacct, unsuspendacct, killacct, passwd',
-      created: 'Oct 12, 2026',
-    },
-    {
-      id: 'whm-tok-2',
-      label: 'Server Health & Prometheus Exporter',
-      tokenPreview: 'gvx_whm_root_19d4e81a...304f',
-      permissions: 'loadavg, servicestatus, listaccts (Read-Only)',
-      created: 'Oct 17, 2026',
-    },
-  ]);
+  >([]);
   const [newWhmTokenLabel, setNewWhmTokenLabel] = React.useState<string>('');
   const [newWhmTokenScope, setNewWhmTokenScope] = React.useState<string>(
     'Full WHM Account Provisioning (createacct, suspendacct, killacct, passwd)'
@@ -352,30 +337,10 @@ export const NebulixWhmWorkspace: React.FC<NebulixWhmWorkspaceProps> = ({
   // Firewall IP Unblock & Full Server Malware Scanner (`whm-multiphp-security`)
   const [blockedIps, setBlockedIps] = React.useState<
     Array<{ ip: string; reason: string; service: string; blockedAt: string }>
-  >([
-    {
-      ip: '185.220.101.44',
-      reason: '5 failed SSH root login attempts (Fail2Ban sshd jail)',
-      service: 'SSH (Port 22)',
-      blockedAt: '14 mins ago',
-    },
-    {
-      ip: '45.155.205.109',
-      reason: 'ModSecurity OWASP CRS Rule #942100 (SQL Injection attempt)',
-      service: 'Nginx WAF (Port 443)',
-      blockedAt: '42 mins ago',
-    },
-    {
-      ip: '103.76.221.19',
-      reason: '10 failed cPanel/Dovecot IMAP logins in 60s',
-      service: 'Dovecot IMAP (Port 993)',
-      blockedAt: '2 hours ago',
-    },
-  ]);
+  >([]);
   const [whitelistIpInput, setWhitelistIpInput] = React.useState<string>('');
   const [whitelistedIps, setWhitelistedIps] = React.useState<string[]>([
     `${serverIp} (Server Primary IP)`,
-    '122.161.48.90 (Admin Office Static IP)',
   ]);
   const [serverScanRunning, setServerScanRunning] = React.useState<boolean>(false);
   const [lastServerScanReport, setLastServerScanReport] = React.useState<string>(
