@@ -1137,7 +1137,195 @@ $docRoot = __DIR__;
     return verifyPortalToken(token);
   };
 
+  const runPostgresSql = (sql: string, dbName = 'garvix_panel_db'): string | null => {
+    if (process.platform !== 'linux') return null;
+    try {
+      const out = execFileSync('psql', ['-U', 'postgres', '-h', '127.0.0.1', '-d', dbName, '-t', '-A', '-c', sql], {
+        timeout: 8000,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      return out.toString('utf8').trim();
+    } catch {
+      try {
+        const outLocal = execFileSync('psql', ['-U', 'postgres', '-d', dbName, '-t', '-A', '-c', sql], {
+          timeout: 8000,
+          stdio: ['ignore', 'pipe', 'ignore'],
+        });
+        return outLocal.toString('utf8').trim();
+      } catch {
+        return null;
+      }
+    }
+  };
+
+  const initPostgresPanelSchema = (): boolean => {
+    if (process.platform !== 'linux') return false;
+    try {
+      // Create garvix_panel_db if it doesn't exist
+      const existsOut = runPostgresSql(
+        "SELECT 1 FROM pg_database WHERE datname = 'garvix_panel_db';",
+        'postgres'
+      );
+      if (existsOut !== '1') {
+        runPostgresSql('CREATE DATABASE garvix_panel_db;', 'postgres');
+      }
+      const ddl = `
+        CREATE TABLE IF NOT EXISTS garvix_portal_settings (
+          setting_key VARCHAR(120) PRIMARY KEY,
+          setting_value JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS garvix_license_plans (
+          code VARCHAR(64) PRIMARY KEY,
+          name VARCHAR(160) NOT NULL,
+          monthly_inr INTEGER NOT NULL,
+          yearly_inr INTEGER NOT NULL,
+          panel_mode VARCHAR(64) NOT NULL,
+          max_accounts INTEGER NOT NULL,
+          payload_json JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS garvix_customer_licenses (
+          id VARCHAR(120) PRIMARY KEY,
+          customer_email VARCHAR(255) NOT NULL,
+          plan_code VARCHAR(64) NOT NULL,
+          plan_name VARCHAR(160) NOT NULL,
+          panel_mode VARCHAR(64) NOT NULL,
+          max_accounts INTEGER NOT NULL,
+          server_ip VARCHAR(64) NOT NULL,
+          license_key VARCHAR(160) NOT NULL,
+          status VARCHAR(32) NOT NULL,
+          payload_json JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS garvix_hosted_websites (
+          domain VARCHAR(255) PRIMARY KEY,
+          username VARCHAR(64) NOT NULL,
+          doc_root TEXT NOT NULL,
+          vhost_conf_path TEXT NOT NULL,
+          nginx_status VARCHAR(32) NOT NULL,
+          ssl_status VARCHAR(32) NOT NULL,
+          php_version VARCHAR(64) NOT NULL,
+          created_at VARCHAR(32) NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS garvix_hosted_databases (
+          db_name VARCHAR(120) PRIMARY KEY,
+          db_user VARCHAR(120) NOT NULL,
+          engine VARCHAR(64) NOT NULL,
+          status VARCHAR(64) NOT NULL,
+          created_at VARCHAR(32) NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+      `;
+      return runPostgresSql(ddl, 'garvix_panel_db') !== null;
+    } catch {
+      return false;
+    }
+  };
+
+  const postgresReady = initPostgresPanelSchema();
+
+  const syncPortalStateToPostgres = () => {
+    if (!postgresReady) return;
+    try {
+      const fullPayloadB64 = Buffer.from(
+        JSON.stringify({
+          apiTokensList,
+          cronJobsList,
+          sshKeysList,
+          licensedServersList,
+          licenseInvoicesList,
+          storeUsersList,
+          razorpaySettings,
+          razorpayOrdersList,
+          upiSettings,
+          upiOrdersList,
+          backupArtifactsList,
+          trashItemsList,
+          portalState,
+        }),
+        'utf8'
+      ).toString('base64');
+
+      const statements: string[] = [
+        `INSERT INTO garvix_portal_settings (setting_key, setting_value, updated_at)
+         VALUES ('full_panel_state', convert_from(decode('${fullPayloadB64}', 'base64'), 'UTF8')::jsonb, NOW())
+         ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = NOW();`,
+      ];
+
+      for (const plan of portalState.licensePlans ?? []) {
+        const code = String(plan.code ?? '').replace(/[^a-zA-Z0-9_]/g, '');
+        if (!code) continue;
+        const name = String(plan.name ?? '').replace(/'/g, "''");
+        const monthlyInr = Number(plan.monthlyInr ?? 0) || 0;
+        const yearlyInr = Number(plan.yearlyInr ?? monthlyInr * 10) || 0;
+        const panelMode = String(plan.panelMode ?? 'WHM_AND_CPANEL').replace(/[^a-zA-Z0-9_]/g, '');
+        const maxAccounts = Number(plan.maxAccounts ?? 0) || 0;
+        const b64 = Buffer.from(JSON.stringify(plan), 'utf8').toString('base64');
+        statements.push(
+          `INSERT INTO garvix_license_plans (code, name, monthly_inr, yearly_inr, panel_mode, max_accounts, payload_json, updated_at)
+           VALUES ('${code}', '${name}', ${monthlyInr}, ${yearlyInr}, '${panelMode}', ${maxAccounts}, convert_from(decode('${b64}', 'base64'), 'UTF8')::jsonb, NOW())
+           ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, monthly_inr = EXCLUDED.monthly_inr, yearly_inr = EXCLUDED.yearly_inr, panel_mode = EXCLUDED.panel_mode, max_accounts = EXCLUDED.max_accounts, payload_json = EXCLUDED.payload_json, updated_at = NOW();`
+        );
+      }
+
+      for (const lic of portalState.customerLicenses ?? []) {
+        const id = String(lic.id ?? '').replace(/[^a-zA-Z0-9_-]/g, '');
+        if (!id) continue;
+        const email = String(lic.customerEmail ?? '').replace(/'/g, "''");
+        const planCode = String(lic.planCode ?? '').replace(/[^a-zA-Z0-9_]/g, '');
+        const planName = String(lic.planName ?? '').replace(/'/g, "''");
+        const panelMode = String(lic.panelMode ?? '').replace(/[^a-zA-Z0-9_]/g, '');
+        const maxAccounts = Number(lic.maxAccounts ?? 0) || 0;
+        const serverIp = String(lic.serverIp ?? '').replace(/'/g, "''");
+        const licenseKey = String(lic.licenseKey ?? '').replace(/'/g, "''");
+        const status = String(lic.status ?? 'ACTIVE').replace(/[^a-zA-Z0-9_]/g, '');
+        const b64 = Buffer.from(JSON.stringify(lic), 'utf8').toString('base64');
+        statements.push(
+          `INSERT INTO garvix_customer_licenses (id, customer_email, plan_code, plan_name, panel_mode, max_accounts, server_ip, license_key, status, payload_json, updated_at)
+           VALUES ('${id}', '${email}', '${planCode}', '${planName}', '${panelMode}', ${maxAccounts}, '${serverIp}', '${licenseKey}', '${status}', convert_from(decode('${b64}', 'base64'), 'UTF8')::jsonb, NOW())
+           ON CONFLICT (id) DO UPDATE SET customer_email = EXCLUDED.customer_email, plan_code = EXCLUDED.plan_code, plan_name = EXCLUDED.plan_name, panel_mode = EXCLUDED.panel_mode, max_accounts = EXCLUDED.max_accounts, server_ip = EXCLUDED.server_ip, license_key = EXCLUDED.license_key, status = EXCLUDED.status, payload_json = EXCLUDED.payload_json, updated_at = NOW();`
+        );
+      }
+
+      for (const web of portalState.hostedWebsites ?? []) {
+        const domain = sanitizeDomainName(web.domain);
+        if (!domain) continue;
+        const username = String(web.username ?? 'web').replace(/[^a-zA-Z0-9_]/g, '');
+        const docRoot = String(web.docRoot ?? '').replace(/'/g, "''");
+        const vhostConfPath = String(web.vhostConfPath ?? '').replace(/'/g, "''");
+        const nginxStatus = String(web.nginxStatus ?? 'LIVE_NGINX').replace(/[^a-zA-Z0-9_]/g, '');
+        const sslStatus = String(web.sslStatus ?? 'HTTP_ONLY').replace(/[^a-zA-Z0-9_]/g, '');
+        const phpVer = String(web.phpVersion ?? 'PHP 8.3').replace(/'/g, "''");
+        const createdAt = String(web.createdAt ?? '').replace(/'/g, "''");
+        statements.push(
+          `INSERT INTO garvix_hosted_websites (domain, username, doc_root, vhost_conf_path, nginx_status, ssl_status, php_version, created_at, updated_at)
+           VALUES ('${domain}', '${username}', '${docRoot}', '${vhostConfPath}', '${nginxStatus}', '${sslStatus}', '${phpVer}', '${createdAt}', NOW())
+           ON CONFLICT (domain) DO UPDATE SET username = EXCLUDED.username, doc_root = EXCLUDED.doc_root, nginx_status = EXCLUDED.nginx_status, ssl_status = EXCLUDED.ssl_status, updated_at = NOW();`
+        );
+      }
+
+      for (const db of portalState.hostedDatabases ?? []) {
+        const dbName = String(db.dbName ?? '').replace(/[^a-zA-Z0-9_]/g, '');
+        if (!dbName) continue;
+        const dbUser = String(db.dbUser ?? '').replace(/[^a-zA-Z0-9_]/g, '');
+        const engine = String(db.engine ?? 'POSTGRESQL_16').replace(/[^a-zA-Z0-9_]/g, '');
+        const status = String(db.status ?? 'LIVE_POSTGRES').replace(/[^a-zA-Z0-9_]/g, '');
+        const createdAt = String(db.createdAt ?? '').replace(/'/g, "''");
+        statements.push(
+          `INSERT INTO garvix_hosted_databases (db_name, db_user, engine, status, created_at, updated_at)
+           VALUES ('${dbName}', '${dbUser}', '${engine}', '${status}', '${createdAt}', NOW())
+           ON CONFLICT (db_name) DO UPDATE SET db_user = EXCLUDED.db_user, engine = EXCLUDED.engine, status = EXCLUDED.status, updated_at = NOW();`
+        );
+      }
+
+      runPostgresSql(statements.join('\n'), 'garvix_panel_db');
+    } catch (_) {}
+  };
+
   const saveExtras = () => {
+    syncPortalStateToPostgres();
     if (!extrasFilePath) return;
     try {
       fs.writeFileSync(
@@ -1166,80 +1354,108 @@ $docRoot = __DIR__;
     } catch (_) {}
   };
 
-  if (extrasFilePath && fs.existsSync(extrasFilePath)) {
+  const applyRestoredPayload = (parsed: Record<string, any>) => {
+    if (Array.isArray(parsed.apiTokensList)) {
+      apiTokensList.splice(0, apiTokensList.length, ...parsed.apiTokensList);
+    }
+    if (Array.isArray(parsed.cronJobsList)) {
+      cronJobsList.splice(0, cronJobsList.length, ...parsed.cronJobsList);
+    }
+    if (Array.isArray(parsed.sshKeysList)) {
+      sshKeysList.splice(0, sshKeysList.length, ...parsed.sshKeysList);
+    }
+    if (Array.isArray(parsed.licensedServersList) && parsed.licensedServersList.length > 0) {
+      licensedServersList.splice(0, licensedServersList.length, ...parsed.licensedServersList);
+    }
+    if (Array.isArray(parsed.licenseInvoicesList)) {
+      licenseInvoicesList.splice(0, licenseInvoicesList.length, ...parsed.licenseInvoicesList);
+    }
+    if (Array.isArray(parsed.storeUsersList) && parsed.storeUsersList.length > 0) {
+      storeUsersList.splice(0, storeUsersList.length, ...parsed.storeUsersList);
+    }
+    if (parsed.razorpaySettings && typeof parsed.razorpaySettings === 'object') {
+      razorpaySettings = {
+        keyId: String(parsed.razorpaySettings.keyId ?? razorpaySettings.keyId),
+        keySecret: String(parsed.razorpaySettings.keySecret ?? razorpaySettings.keySecret),
+        webhookSecret: String(parsed.razorpaySettings.webhookSecret ?? razorpaySettings.webhookSecret),
+        companyName: String(parsed.razorpaySettings.companyName ?? razorpaySettings.companyName),
+        merchantVpa: String(parsed.razorpaySettings.merchantVpa ?? razorpaySettings.merchantVpa),
+      };
+    }
+    if (Array.isArray(parsed.razorpayOrdersList)) {
+      razorpayOrdersList.splice(0, razorpayOrdersList.length, ...parsed.razorpayOrdersList);
+    }
+    if (parsed.upiSettings && typeof parsed.upiSettings === 'object') {
+      upiSettings = {
+        merchantVpa: String(parsed.upiSettings.merchantVpa ?? upiSettings.merchantVpa),
+        merchantName: String(parsed.upiSettings.merchantName ?? upiSettings.merchantName),
+        merchantCategoryCode: String(parsed.upiSettings.merchantCategoryCode ?? '5734'),
+      };
+    }
+    if (Array.isArray(parsed.upiOrdersList)) {
+      upiOrdersList.splice(0, upiOrdersList.length, ...parsed.upiOrdersList);
+    }
+    if (Array.isArray(parsed.backupArtifactsList)) {
+      backupArtifactsList.splice(0, backupArtifactsList.length, ...parsed.backupArtifactsList);
+    }
+    if (Array.isArray(parsed.trashItemsList)) {
+      trashItemsList.splice(0, trashItemsList.length, ...parsed.trashItemsList);
+    }
+    if (parsed.portalState && typeof parsed.portalState === 'object') {
+      const ps = parsed.portalState;
+      portalState = {
+        ...portalState,
+        ...ps,
+        licensePlans:
+          Array.isArray(ps.licensePlans) && ps.licensePlans.length > 0
+            ? ps.licensePlans
+            : portalState.licensePlans,
+        customerLicenses:
+          Array.isArray(ps.customerLicenses) && ps.customerLicenses.length > 0
+            ? ps.customerLicenses
+            : portalState.customerLicenses,
+        razorpayConfig: ps.razorpayConfig
+          ? { ...portalState.razorpayConfig!, ...ps.razorpayConfig }
+          : portalState.razorpayConfig,
+        adminCredentials: ps.adminCredentials
+          ? { ...portalState.adminCredentials!, ...ps.adminCredentials }
+          : portalState.adminCredentials,
+        jwtSecret: ps.jwtSecret || portalState.jwtSecret,
+        hostedWebsites: Array.isArray(ps.hostedWebsites) ? ps.hostedWebsites : [],
+        hostedDatabases: Array.isArray(ps.hostedDatabases) ? ps.hostedDatabases : [],
+      };
+    }
+  };
+
+  let loadedFromPostgres = false;
+  if (postgresReady) {
     try {
-      const parsed = JSON.parse(fs.readFileSync(extrasFilePath, 'utf8'));
-      if (Array.isArray(parsed.apiTokensList)) {
-        apiTokensList.splice(0, apiTokensList.length, ...parsed.apiTokensList);
-      }
-      if (Array.isArray(parsed.cronJobsList)) {
-        cronJobsList.splice(0, cronJobsList.length, ...parsed.cronJobsList);
-      }
-      if (Array.isArray(parsed.sshKeysList)) {
-        sshKeysList.splice(0, sshKeysList.length, ...parsed.sshKeysList);
-      }
-      if (Array.isArray(parsed.licensedServersList) && parsed.licensedServersList.length > 0) {
-        licensedServersList.splice(0, licensedServersList.length, ...parsed.licensedServersList);
-      }
-      if (Array.isArray(parsed.licenseInvoicesList)) {
-        licenseInvoicesList.splice(0, licenseInvoicesList.length, ...parsed.licenseInvoicesList);
-      }
-      if (Array.isArray(parsed.storeUsersList) && parsed.storeUsersList.length > 0) {
-        storeUsersList.splice(0, storeUsersList.length, ...parsed.storeUsersList);
-      }
-      if (parsed.razorpaySettings && typeof parsed.razorpaySettings === 'object') {
-        razorpaySettings = {
-          keyId: String(parsed.razorpaySettings.keyId ?? razorpaySettings.keyId),
-          keySecret: String(parsed.razorpaySettings.keySecret ?? razorpaySettings.keySecret),
-          webhookSecret: String(parsed.razorpaySettings.webhookSecret ?? razorpaySettings.webhookSecret),
-          companyName: String(parsed.razorpaySettings.companyName ?? razorpaySettings.companyName),
-          merchantVpa: String(parsed.razorpaySettings.merchantVpa ?? razorpaySettings.merchantVpa),
-        };
-      }
-      if (Array.isArray(parsed.razorpayOrdersList)) {
-        razorpayOrdersList.splice(0, razorpayOrdersList.length, ...parsed.razorpayOrdersList);
-      }
-      if (parsed.upiSettings && typeof parsed.upiSettings === 'object') {
-        upiSettings = {
-          merchantVpa: String(parsed.upiSettings.merchantVpa ?? upiSettings.merchantVpa),
-          merchantName: String(parsed.upiSettings.merchantName ?? upiSettings.merchantName),
-          merchantCategoryCode: String(parsed.upiSettings.merchantCategoryCode ?? '5734'),
-        };
-      }
-      if (Array.isArray(parsed.upiOrdersList)) {
-        upiOrdersList.splice(0, upiOrdersList.length, ...parsed.upiOrdersList);
-      }
-      if (Array.isArray(parsed.backupArtifactsList)) {
-        backupArtifactsList.splice(0, backupArtifactsList.length, ...parsed.backupArtifactsList);
-      }
-      if (Array.isArray(parsed.trashItemsList)) {
-        trashItemsList.splice(0, trashItemsList.length, ...parsed.trashItemsList);
-      }
-      if (parsed.portalState && typeof parsed.portalState === 'object') {
-        const ps = parsed.portalState;
-        portalState = {
-          ...portalState,
-          ...ps,
-          licensePlans:
-            Array.isArray(ps.licensePlans) && ps.licensePlans.length > 0
-              ? ps.licensePlans
-              : portalState.licensePlans,
-          customerLicenses:
-            Array.isArray(ps.customerLicenses) && ps.customerLicenses.length > 0
-              ? ps.customerLicenses
-              : portalState.customerLicenses,
-          razorpayConfig: ps.razorpayConfig
-            ? { ...portalState.razorpayConfig!, ...ps.razorpayConfig }
-            : portalState.razorpayConfig,
-          adminCredentials: ps.adminCredentials
-            ? { ...portalState.adminCredentials!, ...ps.adminCredentials }
-            : portalState.adminCredentials,
-          jwtSecret: ps.jwtSecret || portalState.jwtSecret,
-          hostedWebsites: Array.isArray(ps.hostedWebsites) ? ps.hostedWebsites : [],
-          hostedDatabases: Array.isArray(ps.hostedDatabases) ? ps.hostedDatabases : [],
-        };
+      const b64Out = runPostgresSql(
+        "SELECT encode(convert_to(setting_value::text, 'UTF8'), 'base64') FROM garvix_portal_settings WHERE setting_key = 'full_panel_state';",
+        'garvix_panel_db'
+      );
+      if (b64Out && b64Out.length > 16) {
+        const cleanB64 = b64Out.replace(/\s+/g, '');
+        const decodedJson = Buffer.from(cleanB64, 'base64').toString('utf8');
+        const parsedPg = JSON.parse(decodedJson);
+        if (parsedPg && typeof parsedPg === 'object') {
+          applyRestoredPayload(parsedPg);
+          loadedFromPostgres = true;
+        }
       }
     } catch (_) {}
+  }
+
+  if (!loadedFromPostgres && extrasFilePath && fs.existsSync(extrasFilePath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(extrasFilePath, 'utf8'));
+      applyRestoredPayload(parsed);
+      if (postgresReady) {
+        syncPortalStateToPostgres();
+      }
+    } catch (_) {}
+  } else if (!loadedFromPostgres && postgresReady) {
+    syncPortalStateToPostgres();
   }
 
   // Ensure default demo domain garvixcloud.in has a real document root provisioned
@@ -4490,6 +4706,43 @@ $docRoot = __DIR__;
         return;
       }
 
+      if (req.method === 'GET' && pathname === '/api/v1/garvix-portal/hosting/postgres-status') {
+        sendJson(res, 200, {
+          success: true,
+          requestId,
+          timestamp: new Date().toISOString(),
+          data: {
+            engine: 'PostgreSQL 16',
+            databaseName: 'garvix_panel_db',
+            port: 5432,
+            postgresConnected: postgresReady,
+            tables: [
+              {
+                name: 'garvix_license_plans',
+                rows: (portalState.licensePlans ?? []).length,
+              },
+              {
+                name: 'garvix_customer_licenses',
+                rows: (portalState.customerLicenses ?? []).length,
+              },
+              {
+                name: 'garvix_portal_settings',
+                rows: 1,
+              },
+              {
+                name: 'garvix_hosted_websites',
+                rows: (portalState.hostedWebsites ?? []).length,
+              },
+              {
+                name: 'garvix_hosted_databases',
+                rows: (portalState.hostedDatabases ?? []).length,
+              },
+            ],
+          },
+        });
+        return;
+      }
+
       if (req.method === 'POST' && pathname === '/api/v1/garvix-portal/hosting/databases') {
         const body = await readJsonBody(req);
         const cleanDbName = String(body.dbName ?? '')
@@ -4502,9 +4755,9 @@ $docRoot = __DIR__;
           .slice(0, 48);
         const cleanDbPass = String(body.dbPass ?? 'DbPass@2026').replace(/['"\\;]/g, '');
         const engine =
-          String(body.engine ?? 'MARIADB_10_11') === 'POSTGRESQL_16'
-            ? 'POSTGRESQL_16'
-            : 'MARIADB_10_11';
+          String(body.engine ?? 'POSTGRESQL_16') === 'MARIADB_10_11'
+            ? 'MARIADB_10_11'
+            : 'POSTGRESQL_16';
 
         if (!cleanDbName || !cleanDbUser) {
           throw new Error('VALIDATION_FAILED: Database name and username are required.');
@@ -4512,7 +4765,34 @@ $docRoot = __DIR__;
 
         let dbStatus: 'LIVE_MARIADB' | 'LIVE_POSTGRES' | 'SANDBOX_RECORDED' = 'SANDBOX_RECORDED';
 
-        if (process.platform === 'linux' && engine === 'MARIADB_10_11') {
+        if (process.platform === 'linux' && engine === 'POSTGRESQL_16') {
+          try {
+            try {
+              execFileSync('systemctl', ['start', 'postgresql']);
+            } catch {}
+            runPostgresSql(
+              `DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${cleanDbUser}') THEN CREATE ROLE "${cleanDbUser}" WITH LOGIN PASSWORD '${cleanDbPass}'; ELSE ALTER ROLE "${cleanDbUser}" WITH LOGIN PASSWORD '${cleanDbPass}'; END IF; END $$;`,
+              'postgres'
+            );
+            const dbExists = runPostgresSql(
+              `SELECT 1 FROM pg_database WHERE datname = '${cleanDbName}';`,
+              'postgres'
+            );
+            if (dbExists !== '1') {
+              runPostgresSql(
+                `CREATE DATABASE "${cleanDbName}" OWNER "${cleanDbUser}";`,
+                'postgres'
+              );
+            }
+            runPostgresSql(
+              `GRANT ALL PRIVILEGES ON DATABASE "${cleanDbName}" TO "${cleanDbUser}";`,
+              'postgres'
+            );
+            dbStatus = 'LIVE_POSTGRES';
+          } catch {
+            dbStatus = 'SANDBOX_RECORDED';
+          }
+        } else if (process.platform === 'linux' && engine === 'MARIADB_10_11') {
           try {
             try {
               execFileSync('systemctl', ['start', 'mariadb']);

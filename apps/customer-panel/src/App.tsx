@@ -1124,7 +1124,7 @@ export function CustomerPanelApp(): React.ReactElement {
   const [newEmailQuota, setNewEmailQuota] = React.useState<number>(2048);
 
   const [newDbEngine, setNewDbEngine] = React.useState<'POSTGRESQL_16' | 'MARIADB_10_11'>(
-    'MARIADB_10_11'
+    'POSTGRESQL_16'
   );
   const [newDbName, setNewDbName] = React.useState<string>('crm_prod');
   const [newDbUser, setNewDbUser] = React.useState<string>('crm_admin');
@@ -3140,8 +3140,8 @@ export function CustomerPanelApp(): React.ReactElement {
               }
               className="h-10 w-full rounded-xl border border-indigo-200 bg-white px-3 text-xs font-bold text-slate-800"
             >
-              <option value="MARIADB_10_11">MariaDB 10.11 / MySQL (Port 3306 · phpMyAdmin)</option>
-              <option value="POSTGRESQL_16">PostgreSQL 16 (Port 5432 · pgAdmin / SQL Studio)</option>
+              <option value="POSTGRESQL_16">PostgreSQL 16 (Port 5432 · pgAdmin / SQL Studio · Recommended)</option>
+              <option value="MARIADB_10_11">MariaDB 10.11 / MySQL (Port 3306 · phpMyAdmin / WordPress)</option>
             </select>
           </div>
 
