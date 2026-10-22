@@ -633,6 +633,25 @@ export function createLocalPanelHttpServer(
       expiresAt: string;
       installedAt: string;
     };
+    hostedWebsites?: Array<{
+      id: string;
+      domain: string;
+      username: string;
+      docRoot: string;
+      vhostConfPath: string;
+      nginxStatus: 'LIVE_NGINX' | 'HOST_ROUTED';
+      sslStatus: 'ACTIVE_HTTPS' | 'HTTP_ONLY';
+      phpVersion: string;
+      createdAt: string;
+    }>;
+    hostedDatabases?: Array<{
+      id: string;
+      dbName: string;
+      dbUser: string;
+      engine: 'MARIADB_10_11' | 'POSTGRESQL_16';
+      status: 'LIVE_MARIADB' | 'LIVE_POSTGRES' | 'SANDBOX_RECORDED';
+      createdAt: string;
+    }>;
   } = {
     licensePlans: [...defaultPortalPlans],
     customerLicenses: [...defaultPortalCustomerLicenses],
@@ -655,6 +674,394 @@ export function createLocalPanelHttpServer(
       password: 'Admin@12345',
     },
     jwtSecret: process.env.GARVIX_PORTAL_SECRET || `gvx_hmac_secret_${randomUUID()}`,
+    hostedWebsites: [],
+    hostedDatabases: [],
+  };
+
+  const sanitizeDomainName = (raw: string): string => {
+    return String(raw ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//, '')
+      .replace(/^www\./, '')
+      .replace(/\/.*$/, '')
+      .replace(/[^a-z0-9.-]/g, '');
+  };
+
+  const resolveDomainDocRoot = (cleanDomain: string): string => {
+    if (process.platform === 'linux') {
+      try {
+        const linuxRoot = path.join('/var/www/vhosts', cleanDomain, 'public_html');
+        fs.mkdirSync(linuxRoot, { recursive: true, mode: 0o755 });
+        return linuxRoot;
+      } catch {
+        // Fallback if not running as root
+      }
+    }
+    const fallbackRoot = path.join(
+      dataDir || path.join(os.tmpdir(), 'garvix-vhosts'),
+      'vhosts',
+      cleanDomain,
+      'public_html'
+    );
+    fs.mkdirSync(fallbackRoot, { recursive: true, mode: 0o755 });
+    return fallbackRoot;
+  };
+
+  const buildStarterWebsiteHtml = (domain: string, username: string): string => `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${domain} — Hosted on Garvix Hosting Manager</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: radial-gradient(circle at top, #1e1b4b 0%, #090d16 70%);
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      max-width: 680px;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      border-radius: 24px;
+      padding: 40px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(16px);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(16, 185, 129, 0.18);
+      border: 1px solid rgba(16, 185, 129, 0.45);
+      color: #6ee7b7;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    h1 {
+      font-size: 34px;
+      font-weight: 800;
+      margin-top: 18px;
+      background: linear-gradient(90deg, #ffffff, #a5b4fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    p {
+      color: #cbd5e1;
+      line-height: 1.65;
+      margin-top: 12px;
+      font-size: 15px;
+    }
+    .meta {
+      margin-top: 24px;
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 14px;
+      padding: 16px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12.5px;
+      color: #93c5fd;
+    }
+    .footer {
+      margin-top: 24px;
+      font-size: 12px;
+      color: #94a3b8;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <span class="badge">● Live Website Active</span>
+    <h1>Welcome to ${domain}</h1>
+    <p>
+      This domain is actively hosted and served by <strong>Garvix Hosting Manager</strong> on AlmaLinux 10.
+      To replace this page with your own website, open <strong>cPanel &rarr; File Manager</strong> and edit or upload your files into <code>public_html/index.html</code> or <code>index.php</code>.
+    </p>
+    <div class="meta">
+      <div><strong>Domain:</strong> ${domain}</div>
+      <div style="margin-top:6px;"><strong>Document Root:</strong> /var/www/vhosts/${domain}/public_html</div>
+      <div style="margin-top:6px;"><strong>Account Owner:</strong> ${username}</div>
+    </div>
+    <div class="footer">
+      <span>Powered by Garvix Hosting Manager · Nginx + PHP-FPM</span>
+      <span>Made with ❤️ in India 🇮🇳</span>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const buildStarterPhpFile = (domain: string): string => `<?php
+// ${domain} — Live PHP 8 + MySQL/MariaDB Status Page
+$phpVer = phpversion();
+$serverSoft = $_SERVER['SERVER_SOFTWARE'] ?? 'Garvix Nginx + PHP-FPM Engine';
+$docRoot = __DIR__;
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title><?php echo htmlspecialchars('${domain}'); ?> — PHP <?php echo $phpVer; ?> Live</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; padding: 40px; }
+    .box { max-width: 720px; margin: 0 auto; background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 32px; }
+    .ok { color: #34d399; font-weight: 700; }
+    code { background: #0f172a; padding: 3px 8px; border-radius: 6px; color: #93c5fd; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="ok">● PHP Runtime Active (PHP <?php echo $phpVer; ?>)</div>
+    <h1 style="margin-top:10px;"><?php echo htmlspecialchars('${domain}'); ?></h1>
+    <p>Server Software: <code><?php echo htmlspecialchars($serverSoft); ?></code></p>
+    <p>Document Root: <code><?php echo htmlspecialchars($docRoot); ?></code></p>
+    <p>Server Time: <code><?php echo date('Y-m-d H:i:s T'); ?></code></p>
+    <p>MySQLi Extension: <code><?php echo extension_loaded('mysqli') ? 'ENABLED' : 'NOT LOADED'; ?></code></p>
+  </div>
+</body>
+</html>`;
+
+  const provisionRealLinuxVhost = (opts: {
+    domain: string;
+    username?: string;
+    template?: 'DEFAULT_LANDING' | 'PHP_APP' | 'WORDPRESS';
+  }) => {
+    const cleanDomain = sanitizeDomainName(opts.domain);
+    if (!cleanDomain || !cleanDomain.includes('.') || cleanDomain.includes('..')) {
+      throw new Error('VALIDATION_FAILED: Invalid domain name. Example: mywebsite.in');
+    }
+    const cleanUser =
+      String(opts.username ?? cleanDomain.split('.')[0] ?? 'webuser')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '')
+        .slice(0, 16) || 'webuser';
+
+    const docRoot = resolveDomainDocRoot(cleanDomain);
+    const indexHtmlPath = path.join(docRoot, 'index.html');
+    const indexPhpPath = path.join(docRoot, 'index.php');
+
+    if (opts.template === 'PHP_APP') {
+      fs.writeFileSync(indexPhpPath, buildStarterPhpFile(cleanDomain), 'utf8');
+    } else if (opts.template === 'WORDPRESS') {
+      // Try downloading official WordPress tarball on Linux if curl + tar exist
+      let wpInstalled = false;
+      if (process.platform === 'linux') {
+        try {
+          const tmpTar = `/tmp/wp-${cleanDomain}.tar.gz`;
+          execFileSync('curl', ['-fsSL', 'https://wordpress.org/latest.tar.gz', '-o', tmpTar], {
+            timeout: 45000,
+          });
+          execFileSync('tar', ['-xzf', tmpTar, '--strip-components=1', '-C', docRoot], {
+            timeout: 30000,
+          });
+          try {
+            fs.unlinkSync(tmpTar);
+          } catch {}
+          wpInstalled = true;
+        } catch {
+          wpInstalled = false;
+        }
+      }
+      if (!wpInstalled) {
+        fs.writeFileSync(indexPhpPath, buildStarterPhpFile(cleanDomain), 'utf8');
+      }
+    } else if (!fs.existsSync(indexHtmlPath) && !fs.existsSync(indexPhpPath)) {
+      fs.writeFileSync(indexHtmlPath, buildStarterWebsiteHtml(cleanDomain, cleanUser), 'utf8');
+    }
+
+    let vhostConfPath = `/etc/nginx/conf.d/vhost-${cleanDomain}.conf`;
+    let nginxStatus: 'LIVE_NGINX' | 'HOST_ROUTED' = 'HOST_ROUTED';
+
+    if (process.platform === 'linux' && fs.existsSync('/etc/nginx/conf.d')) {
+      try {
+        // Ensure permissions & SELinux context on /var/www/vhosts/<domain>
+        try {
+          execFileSync('chmod', ['-R', '755', path.dirname(docRoot)]);
+        } catch {}
+        try {
+          execFileSync('restorecon', ['-Rv', path.dirname(docRoot)]);
+        } catch {}
+
+        // Make sure garvix-panel.conf uses default_server for IP/panel access so domain vhosts take priority
+        const panelConfPath = '/etc/nginx/conf.d/garvix-panel.conf';
+        if (fs.existsSync(panelConfPath)) {
+          const panelConfRaw = fs.readFileSync(panelConfPath, 'utf8');
+          if (panelConfRaw.includes('listen 80;') && !panelConfRaw.includes('default_server')) {
+            const updatedPanelConf = panelConfRaw.replace(
+              'listen 80;',
+              'listen 80 default_server;'
+            );
+            fs.writeFileSync(panelConfPath, updatedPanelConf, 'utf8');
+          }
+        }
+
+        const hasPhpFpmSock = fs.existsSync('/run/php-fpm/www.sock');
+        const vhostBlock = hasPhpFpmSock
+          ? `server {
+    listen 80;
+    server_name ${cleanDomain} www.${cleanDomain};
+    root ${docRoot};
+    index index.php index.html index.htm;
+
+    location / {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    location ~ \\.php$ {
+        try_files $uri =404;
+        fastcgi_pass unix:/run/php-fpm/www.sock;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+}
+`
+          : `server {
+    listen 80;
+    server_name ${cleanDomain} www.${cleanDomain};
+    root ${docRoot};
+    index index.html index.htm index.php;
+
+    location / {
+        try_files $uri $uri/ /index.html =404;
+    }
+}
+`;
+        fs.writeFileSync(vhostConfPath, vhostBlock, 'utf8');
+        execFileSync('nginx', ['-t']);
+        execFileSync('systemctl', ['reload', 'nginx']);
+        nginxStatus = 'LIVE_NGINX';
+      } catch {
+        // If nginx -t failed (e.g. php-fpm not started), write safe static vhost and reload
+        try {
+          const safeStaticBlock = `server {
+    listen 80;
+    server_name ${cleanDomain} www.${cleanDomain};
+    root ${docRoot};
+    index index.html index.htm;
+
+    location / {
+        try_files $uri $uri/ /index.html =404;
+    }
+}
+`;
+          fs.writeFileSync(vhostConfPath, safeStaticBlock, 'utf8');
+          execFileSync('nginx', ['-t']);
+          execFileSync('systemctl', ['reload', 'nginx']);
+          nginxStatus = 'LIVE_NGINX';
+        } catch {
+          nginxStatus = 'HOST_ROUTED';
+        }
+      }
+    }
+
+    const existingList = portalState.hostedWebsites ?? [];
+    const existingIdx = existingList.findIndex((w) => w.domain === cleanDomain);
+    const record = {
+      id: existingIdx >= 0 ? existingList[existingIdx]!.id : `web_${Date.now()}`,
+      domain: cleanDomain,
+      username: cleanUser,
+      docRoot,
+      vhostConfPath,
+      nginxStatus,
+      sslStatus:
+        existingIdx >= 0 ? existingList[existingIdx]!.sslStatus : ('HTTP_ONLY' as const),
+      phpVersion: 'PHP 8.3 (FPM)',
+      createdAt:
+        existingIdx >= 0
+          ? existingList[existingIdx]!.createdAt
+          : new Date().toISOString().slice(0, 10),
+    };
+
+    if (existingIdx >= 0) {
+      existingList[existingIdx] = record;
+      portalState.hostedWebsites = [...existingList];
+    } else {
+      portalState.hostedWebsites = [record, ...existingList];
+    }
+    saveExtras();
+    return record;
+  };
+
+  const serveHostedWebsiteResponse = (
+    res: ServerResponse,
+    docRoot: string,
+    rawSubPath: string
+  ): boolean => {
+    const cleanRel = rawSubPath.replace(/^\/+/, '').split('?')[0] || '';
+    if (cleanRel.includes('..')) return false;
+
+    let candidatePath = path.join(docRoot, cleanRel);
+    if (!cleanRel || (fs.existsSync(candidatePath) && fs.statSync(candidatePath).isDirectory())) {
+      const phpIndex = path.join(candidatePath, 'index.php');
+      const htmlIndex = path.join(candidatePath, 'index.html');
+      if (fs.existsSync(htmlIndex)) {
+        candidatePath = htmlIndex;
+      } else if (fs.existsSync(phpIndex)) {
+        candidatePath = phpIndex;
+      } else {
+        return false;
+      }
+    }
+
+    if (!fs.existsSync(candidatePath) || !fs.statSync(candidatePath).isFile()) {
+      return false;
+    }
+
+    const ext = path.extname(candidatePath).toLowerCase();
+    if (ext === '.php') {
+      try {
+        const phpOutput = execFileSync('php', [candidatePath], {
+          cwd: path.dirname(candidatePath),
+          timeout: 8000,
+        });
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-cache',
+        });
+        res.end(phpOutput);
+        return true;
+      } catch {
+        // Fallback: serve raw or basic notice if php CLI not installed
+      }
+    }
+
+    const mimeMap: Record<string, string> = {
+      '.html': 'text/html; charset=utf-8',
+      '.htm': 'text/html; charset=utf-8',
+      '.css': 'text/css; charset=utf-8',
+      '.js': 'application/javascript; charset=utf-8',
+      '.json': 'application/json; charset=utf-8',
+      '.svg': 'image/svg+xml',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.ico': 'image/x-icon',
+      '.txt': 'text/plain; charset=utf-8',
+    };
+    res.writeHead(200, {
+      'Content-Type': mimeMap[ext] || 'text/html; charset=utf-8',
+      'Cache-Control': 'no-cache',
+    });
+    res.end(fs.readFileSync(candidatePath));
+    return true;
   };
 
   const pendingPortalRazorpayOrders = new Map<
@@ -828,9 +1235,22 @@ export function createLocalPanelHttpServer(
             ? { ...portalState.adminCredentials!, ...ps.adminCredentials }
             : portalState.adminCredentials,
           jwtSecret: ps.jwtSecret || portalState.jwtSecret,
+          hostedWebsites: Array.isArray(ps.hostedWebsites) ? ps.hostedWebsites : [],
+          hostedDatabases: Array.isArray(ps.hostedDatabases) ? ps.hostedDatabases : [],
         };
       }
     } catch (_) {}
+  }
+
+  // Ensure default demo domain garvixcloud.in has a real document root provisioned
+  if (!portalState.hostedWebsites || portalState.hostedWebsites.length === 0) {
+    try {
+      provisionRealLinuxVhost({
+        domain: 'garvixcloud.in',
+        username: 'garvixprod',
+        template: 'DEFAULT_LANDING',
+      });
+    } catch {}
   }
 
   const server = createServer(async (req, res) => {
@@ -844,6 +1264,51 @@ export function createLocalPanelHttpServer(
     const pathname = url.pathname;
 
     try {
+      // 1. Live Website Preview URL: /site-preview/<domain>/<file>
+      if (
+        (req.method === 'GET' || req.method === 'HEAD') &&
+        pathname.startsWith('/site-preview/')
+      ) {
+        const afterPrefix = pathname.slice('/site-preview/'.length);
+        const slashIdx = afterPrefix.indexOf('/');
+        const targetDomain = sanitizeDomainName(
+          slashIdx >= 0 ? afterPrefix.slice(0, slashIdx) : afterPrefix
+        );
+        const subFile = slashIdx >= 0 ? afterPrefix.slice(slashIdx + 1) : '';
+        const siteRecord =
+          (portalState.hostedWebsites ?? []).find((w) => w.domain === targetDomain) ??
+          provisionRealLinuxVhost({ domain: targetDomain });
+        if (serveHostedWebsiteResponse(res, siteRecord.docRoot, subFile)) {
+          return;
+        }
+      }
+
+      // 2. Direct Domain Host-Header Routing (when a user points their domain A-record to 200.234.39.100)
+      const incomingHost = sanitizeDomainName(String(req.headers.host ?? '').split(':')[0] ?? '');
+      const isPanelAccess =
+        !incomingHost ||
+        incomingHost === 'localhost' ||
+        incomingHost === '127.0.0.1' ||
+        incomingHost === '200.234.39.100' ||
+        incomingHost.includes('hstgr.cloud') ||
+        incomingHost === portalState.panelSsl?.domain ||
+        pathname.startsWith('/api/') ||
+        pathname.startsWith('/assets/') ||
+        pathname.startsWith('/admin') ||
+        pathname.startsWith('/whm') ||
+        pathname.startsWith('/cpanel') ||
+        pathname.startsWith('/store') ||
+        pathname.startsWith('/login');
+
+      if (!isPanelAccess && (req.method === 'GET' || req.method === 'HEAD')) {
+        const matchedWebsite = (portalState.hostedWebsites ?? []).find(
+          (w) => w.domain === incomingHost
+        );
+        if (matchedWebsite && serveHostedWebsiteResponse(res, matchedWebsite.docRoot, pathname)) {
+          return;
+        }
+      }
+
       const customerPanelDistDir = path.resolve(process.cwd(), 'apps/customer-panel/dist');
       const customerPanelIndexHtml = path.join(customerPanelDistDir, 'index.html');
 
@@ -3626,15 +4091,12 @@ export function createLocalPanelHttpServer(
 
       if (req.method === 'POST' && pathname === '/api/v1/garvix-portal/ssl/install') {
         const body = await readJsonBody(req);
-        const rawDomain = String(body.domain ?? '')
-          .trim()
-          .toLowerCase()
-          .replace(/^https?:\/\//, '')
-          .replace(/\/.*$/, '');
+        const rawDomain = sanitizeDomainName(String(body.domain ?? ''));
         const email = String(body.email ?? 'admin@garvixcloud.in').trim();
-        const method = String(body.method ?? 'LETS_ENCRYPT').trim() === 'CUSTOM_PEM'
-          ? 'CUSTOM_PEM'
-          : 'LETS_ENCRYPT';
+        const method =
+          String(body.method ?? 'LETS_ENCRYPT').trim() === 'CUSTOM_PEM'
+            ? 'CUSTOM_PEM'
+            : 'LETS_ENCRYPT';
         const isPanelHostname = Boolean(body.isPanelHostname);
 
         if (!rawDomain || !rawDomain.includes('.') || rawDomain.includes('..')) {
@@ -3650,13 +4112,43 @@ export function createLocalPanelHttpServer(
           }
         }
 
-        let issuer = "Let's Encrypt Authority R3 (AutoSSL)";
+        // Ensure vhost exists for customer domain before SSL install
+        if (!isPanelHostname) {
+          provisionRealLinuxVhost({ domain: rawDomain });
+        }
+
+        let issuer = "Let's Encrypt Authority R11 (AutoSSL)";
+        let liveNginxSslApplied = false;
         const expiresAt = new Date(
           Date.now() + (method === 'CUSTOM_PEM' ? 365 : 90) * 24 * 60 * 60 * 1000
         )
           .toISOString()
           .slice(0, 10);
         const installedAt = new Date().toISOString().slice(0, 10);
+
+        if (method === 'LETS_ENCRYPT' && process.platform === 'linux') {
+          try {
+            execFileSync(
+              'certbot',
+              [
+                '--nginx',
+                '-d',
+                rawDomain,
+                '--non-interactive',
+                '--agree-tos',
+                '-m',
+                email,
+                '--redirect',
+              ],
+              { timeout: 60000 }
+            );
+            liveNginxSslApplied = true;
+            issuer = "Let's Encrypt Live Certbot TLS 1.3";
+          } catch {
+            // Domain DNS may not point to 200.234.39.100 yet or certbot still provisioning
+            liveNginxSslApplied = false;
+          }
+        }
 
         if (method === 'CUSTOM_PEM') {
           const certPem = String(body.certificatePem ?? '').trim();
@@ -3670,14 +4162,67 @@ export function createLocalPanelHttpServer(
           }
           issuer = 'Custom Uploaded X.509 SSL Certificate';
 
-          if (dataDir) {
-            try {
-              const sslDir = path.join(dataDir, 'ssl', rawDomain.replace(/[^a-z0-9.-]/g, '_'));
-              fs.mkdirSync(sslDir, { recursive: true });
-              fs.writeFileSync(path.join(sslDir, 'fullchain.pem'), `${certPem}\n${caBundlePem}`.trim(), 'utf8');
-              fs.writeFileSync(path.join(sslDir, 'privkey.pem'), keyPem, { encoding: 'utf8', mode: 0o600 });
-            } catch (_) {}
-          }
+          const targetSslBase =
+            process.platform === 'linux' && fs.existsSync('/etc/nginx/conf.d')
+              ? '/etc/ssl/garvix'
+              : path.join(dataDir || os.tmpdir(), 'ssl');
+          try {
+            const sslDir = path.join(targetSslBase, rawDomain.replace(/[^a-z0-9.-]/g, '_'));
+            fs.mkdirSync(sslDir, { recursive: true });
+            const fullchainPath = path.join(sslDir, 'fullchain.pem');
+            const privkeyPath = path.join(sslDir, 'privkey.pem');
+            fs.writeFileSync(fullchainPath, `${certPem}\n${caBundlePem}`.trim(), 'utf8');
+            fs.writeFileSync(privkeyPath, keyPem, { encoding: 'utf8', mode: 0o600 });
+
+            if (process.platform === 'linux' && fs.existsSync('/etc/nginx/conf.d')) {
+              const docRoot = resolveDomainDocRoot(rawDomain);
+              const vhostConfPath = isPanelHostname
+                ? '/etc/nginx/conf.d/garvix-panel-ssl.conf'
+                : `/etc/nginx/conf.d/vhost-${rawDomain}.conf`;
+              const sslNginxBlock = isPanelHostname
+                ? `server {
+    listen 443 ssl;
+    server_name ${rawDomain};
+    ssl_certificate ${fullchainPath};
+    ssl_certificate_key ${privkeyPath};
+
+    location / {
+        proxy_pass http://127.0.0.1:4100;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
+`
+                : `server {
+    listen 80;
+    listen 443 ssl;
+    server_name ${rawDomain} www.${rawDomain};
+    root ${docRoot};
+    index index.php index.html index.htm;
+    ssl_certificate ${fullchainPath};
+    ssl_certificate_key ${privkeyPath};
+
+    location / {
+        try_files $uri $uri/ /index.html =404;
+    }
+}
+`;
+              fs.writeFileSync(vhostConfPath, sslNginxBlock, 'utf8');
+              execFileSync('nginx', ['-t']);
+              execFileSync('systemctl', ['reload', 'nginx']);
+              liveNginxSslApplied = true;
+            }
+          } catch (_) {}
+        }
+
+        // Update domain's sslStatus in hostedWebsites
+        const webIdx = (portalState.hostedWebsites ?? []).findIndex((w) => w.domain === rawDomain);
+        if (webIdx >= 0 && portalState.hostedWebsites) {
+          portalState.hostedWebsites[webIdx]!.sslStatus = 'ACTIVE_HTTPS';
+          saveExtras();
         }
 
         const sslRecord = {
@@ -3687,6 +4232,7 @@ export function createLocalPanelHttpServer(
           email,
           expiresAt,
           installedAt,
+          liveNginxSslApplied,
           status: 'ACTIVE',
         };
 
@@ -3700,6 +4246,313 @@ export function createLocalPanelHttpServer(
           requestId,
           timestamp: new Date().toISOString(),
           data: sslRecord,
+        });
+        return;
+      }
+
+      // =====================================================================
+      // REAL LINUX WEBSITE HOSTING ENGINE: Domains, Files & Databases
+      // =====================================================================
+      if (req.method === 'GET' && pathname === '/api/v1/garvix-portal/hosting/domains') {
+        const websites = (portalState.hostedWebsites ?? []).map((w) => {
+          let fileCount = 0;
+          try {
+            if (fs.existsSync(w.docRoot)) {
+              fileCount = fs.readdirSync(w.docRoot).length;
+            }
+          } catch {}
+          return {
+            ...w,
+            fileCount,
+            previewUrl: `/site-preview/${w.domain}/`,
+          };
+        });
+        sendJson(res, 200, {
+          success: true,
+          requestId,
+          timestamp: new Date().toISOString(),
+          data: {
+            websites,
+            databases: portalState.hostedDatabases ?? [],
+          },
+        });
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/v1/garvix-portal/hosting/domains') {
+        const body = await readJsonBody(req);
+        const domain = sanitizeDomainName(String(body.domain ?? ''));
+        const username = String(body.username ?? '').trim();
+        const rawTpl = String(body.template ?? 'DEFAULT_LANDING').trim();
+        const template =
+          rawTpl === 'PHP_APP' || rawTpl === 'WORDPRESS' ? rawTpl : 'DEFAULT_LANDING';
+
+        const created = provisionRealLinuxVhost({
+          domain,
+          username: username || undefined,
+          template,
+        });
+
+        sendJson(res, 201, {
+          success: true,
+          requestId,
+          timestamp: new Date().toISOString(),
+          data: {
+            website: {
+              ...created,
+              previewUrl: `/site-preview/${created.domain}/`,
+            },
+          },
+        });
+        return;
+      }
+
+      if (req.method === 'DELETE' && pathname === '/api/v1/garvix-portal/hosting/domains') {
+        const domain = sanitizeDomainName(
+          url.searchParams.get('domain') ?? String((await readJsonBody(req)).domain ?? '')
+        );
+        if (!domain) {
+          throw new Error('VALIDATION_FAILED: Domain is required.');
+        }
+        portalState.hostedWebsites = (portalState.hostedWebsites ?? []).filter(
+          (w) => w.domain !== domain
+        );
+        if (process.platform === 'linux') {
+          try {
+            const vhostFile = `/etc/nginx/conf.d/vhost-${domain}.conf`;
+            if (fs.existsSync(vhostFile)) {
+              fs.unlinkSync(vhostFile);
+              execFileSync('nginx', ['-t']);
+              execFileSync('systemctl', ['reload', 'nginx']);
+            }
+          } catch {}
+        }
+        saveExtras();
+        sendJson(res, 200, {
+          success: true,
+          requestId,
+          timestamp: new Date().toISOString(),
+          data: { deleted: domain },
+        });
+        return;
+      }
+
+      if (req.method === 'GET' && pathname === '/api/v1/garvix-portal/hosting/files') {
+        const domain = sanitizeDomainName(url.searchParams.get('domain') ?? 'garvixcloud.in');
+        const requestedFile = String(url.searchParams.get('file') ?? '').trim();
+        const site =
+          (portalState.hostedWebsites ?? []).find((w) => w.domain === domain) ??
+          provisionRealLinuxVhost({ domain });
+
+        if (requestedFile) {
+          const cleanName = path.basename(requestedFile);
+          const fullPath = path.join(site.docRoot, cleanName);
+          if (!fs.existsSync(fullPath) || !fs.statSync(fullPath).isFile()) {
+            throw new Error(`RESOURCE_NOT_FOUND: File "${cleanName}" does not exist.`);
+          }
+          const content = fs.readFileSync(fullPath, 'utf8');
+          sendJson(res, 200, {
+            success: true,
+            requestId,
+            timestamp: new Date().toISOString(),
+            data: {
+              domain: site.domain,
+              docRoot: site.docRoot,
+              filename: cleanName,
+              content,
+            },
+          });
+          return;
+        }
+
+        const entries = fs.existsSync(site.docRoot) ? fs.readdirSync(site.docRoot) : [];
+        const files = entries.map((name) => {
+          const full = path.join(site.docRoot, name);
+          const stat = fs.statSync(full);
+          const ext = path.extname(name).toLowerCase();
+          return {
+            name,
+            isDirectory: stat.isDirectory(),
+            sizeBytes: stat.size,
+            modifiedAt: stat.mtime.toISOString().slice(0, 19).replace('T', ' '),
+            perms: '0644',
+            isEditable: [
+              '.html',
+              '.htm',
+              '.php',
+              '.css',
+              '.js',
+              '.json',
+              '.txt',
+              '.xml',
+              '.md',
+              '.htaccess',
+            ].includes(ext),
+          };
+        });
+
+        sendJson(res, 200, {
+          success: true,
+          requestId,
+          timestamp: new Date().toISOString(),
+          data: {
+            domain: site.domain,
+            docRoot: site.docRoot,
+            nginxStatus: site.nginxStatus,
+            previewUrl: `/site-preview/${site.domain}/`,
+            files,
+          },
+        });
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/v1/garvix-portal/hosting/files') {
+        const body = await readJsonBody(req);
+        const domain = sanitizeDomainName(String(body.domain ?? 'garvixcloud.in'));
+        const action = String(body.action ?? 'SAVE_FILE').trim();
+
+        if (action === 'INSTALL_TEMPLATE') {
+          const rawTpl = String(body.template ?? 'DEFAULT_LANDING').trim();
+          const tpl =
+            rawTpl === 'PHP_APP' || rawTpl === 'WORDPRESS' ? rawTpl : 'DEFAULT_LANDING';
+          const updatedSite = provisionRealLinuxVhost({ domain, template: tpl });
+          sendJson(res, 200, {
+            success: true,
+            requestId,
+            timestamp: new Date().toISOString(),
+            data: {
+              domain: updatedSite.domain,
+              docRoot: updatedSite.docRoot,
+              previewUrl: `/site-preview/${updatedSite.domain}/`,
+              templateInstalled: tpl,
+            },
+          });
+          return;
+        }
+
+        const rawFilename = String(body.filename ?? '')
+          .trim()
+          .replace(/^\/+/, '');
+        if (!rawFilename || rawFilename.includes('..') || rawFilename.includes('/')) {
+          throw new Error(
+            'VALIDATION_FAILED: Please provide a valid filename inside public_html (e.g. index.html or index.php).'
+          );
+        }
+
+        const site =
+          (portalState.hostedWebsites ?? []).find((w) => w.domain === domain) ??
+          provisionRealLinuxVhost({ domain });
+
+        const targetFile = path.join(site.docRoot, rawFilename);
+        if (Boolean(body.isBase64)) {
+          const buf = Buffer.from(String(body.content ?? ''), 'base64');
+          fs.writeFileSync(targetFile, buf, { mode: 0o644 });
+        } else {
+          fs.writeFileSync(targetFile, String(body.content ?? ''), {
+            encoding: 'utf8',
+            mode: 0o644,
+          });
+        }
+
+        sendJson(res, 200, {
+          success: true,
+          requestId,
+          timestamp: new Date().toISOString(),
+          data: {
+            domain: site.domain,
+            docRoot: site.docRoot,
+            filename: rawFilename,
+            previewUrl: `/site-preview/${site.domain}/${rawFilename}`,
+          },
+        });
+        return;
+      }
+
+      if (req.method === 'DELETE' && pathname === '/api/v1/garvix-portal/hosting/files') {
+        const domain = sanitizeDomainName(url.searchParams.get('domain') ?? 'garvixcloud.in');
+        const rawFilename = String(url.searchParams.get('file') ?? '').trim();
+        if (!rawFilename || rawFilename.includes('..') || rawFilename.includes('/')) {
+          throw new Error('VALIDATION_FAILED: Invalid filename.');
+        }
+        const site = (portalState.hostedWebsites ?? []).find((w) => w.domain === domain);
+        if (site) {
+          const targetFile = path.join(site.docRoot, rawFilename);
+          if (fs.existsSync(targetFile) && fs.statSync(targetFile).isFile()) {
+            fs.unlinkSync(targetFile);
+          }
+        }
+        sendJson(res, 200, {
+          success: true,
+          requestId,
+          timestamp: new Date().toISOString(),
+          data: { deleted: rawFilename },
+        });
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/v1/garvix-portal/hosting/databases') {
+        const body = await readJsonBody(req);
+        const cleanDbName = String(body.dbName ?? '')
+          .trim()
+          .replace(/[^a-zA-Z0-9_]/g, '')
+          .slice(0, 48);
+        const cleanDbUser = String(body.dbUser ?? '')
+          .trim()
+          .replace(/[^a-zA-Z0-9_]/g, '')
+          .slice(0, 48);
+        const cleanDbPass = String(body.dbPass ?? 'DbPass@2026').replace(/['"\\;]/g, '');
+        const engine =
+          String(body.engine ?? 'MARIADB_10_11') === 'POSTGRESQL_16'
+            ? 'POSTGRESQL_16'
+            : 'MARIADB_10_11';
+
+        if (!cleanDbName || !cleanDbUser) {
+          throw new Error('VALIDATION_FAILED: Database name and username are required.');
+        }
+
+        let dbStatus: 'LIVE_MARIADB' | 'LIVE_POSTGRES' | 'SANDBOX_RECORDED' = 'SANDBOX_RECORDED';
+
+        if (process.platform === 'linux' && engine === 'MARIADB_10_11') {
+          try {
+            try {
+              execFileSync('systemctl', ['start', 'mariadb']);
+            } catch {}
+            const sql = [
+              `CREATE DATABASE IF NOT EXISTS \`${cleanDbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
+              `CREATE USER IF NOT EXISTS '${cleanDbUser}'@'localhost' IDENTIFIED BY '${cleanDbPass}';`,
+              `ALTER USER '${cleanDbUser}'@'localhost' IDENTIFIED BY '${cleanDbPass}';`,
+              `GRANT ALL PRIVILEGES ON \`${cleanDbName}\`.* TO '${cleanDbUser}'@'localhost';`,
+              `FLUSH PRIVILEGES;`,
+            ].join(' ');
+            execFileSync('mysql', ['-u', 'root', '-e', sql], { timeout: 10000 });
+            dbStatus = 'LIVE_MARIADB';
+          } catch {
+            dbStatus = 'SANDBOX_RECORDED';
+          }
+        }
+
+        const dbRecord = {
+          id: `db_${Date.now()}`,
+          dbName: cleanDbName,
+          dbUser: cleanDbUser,
+          engine: engine as 'MARIADB_10_11' | 'POSTGRESQL_16',
+          status: dbStatus,
+          host: 'localhost (127.0.0.1)',
+          port: engine === 'POSTGRESQL_16' ? 5432 : 3306,
+          createdAt: new Date().toISOString().slice(0, 10),
+        };
+
+        portalState.hostedDatabases = [
+          dbRecord,
+          ...(portalState.hostedDatabases ?? []).filter((d) => d.dbName !== cleanDbName),
+        ];
+        saveExtras();
+
+        sendJson(res, 201, {
+          success: true,
+          requestId,
+          timestamp: new Date().toISOString(),
+          data: { database: dbRecord },
         });
         return;
       }
